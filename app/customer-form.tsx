@@ -3,6 +3,7 @@ import { useSQLiteContext } from "expo-sqlite";
 import { useState } from "react";
 import { router } from "expo-router";
 import { addCustomer } from "@/db/queries/customers";
+import { useAppStore } from "@/store";
 
 export default function CustomerFormScreen() {
   const db = useSQLiteContext();
@@ -10,6 +11,7 @@ export default function CustomerFormScreen() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
+  const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
   const handleSave = async () => {
     if (!name.trim()) return Alert.alert("Erro", "Informe o nome do cliente");
@@ -17,6 +19,7 @@ export default function CustomerFormScreen() {
     setSaving(true);
     try {
       await addCustomer(db, { name: name.trim(), phone: phone.trim() || undefined, address: address.trim() || undefined });
+      bumpCustomers();
       router.back();
     } catch (e: any) {
       Alert.alert("Erro", e.message ?? "Falha ao salvar cliente");

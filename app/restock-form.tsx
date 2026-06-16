@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import { getCylinderTypes, addRestock } from "@/db/queries/inventory";
 import { CylinderType } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -17,6 +18,7 @@ export default function RestockFormScreen() {
   const [costPerUnit, setCostPerUnit] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const bumpInventory = useAppStore((s) => s.bumpInventory);
 
   const load = useCallback(async () => {
     const cyl = await getCylinderTypes(db);
@@ -51,6 +53,7 @@ export default function RestockFormScreen() {
         cost_per_unit: cost,
         notes: notes.trim() || undefined,
       });
+      bumpInventory();
       router.back();
     } catch (e: any) {
       Alert.alert("Erro", e.message ?? "Falha ao registrar entrada");

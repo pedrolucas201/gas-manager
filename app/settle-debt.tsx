@@ -3,6 +3,7 @@ import { useSQLiteContext } from "expo-sqlite";
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { settleCustomerDebt } from "@/db/queries/customers";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -15,6 +16,7 @@ export default function SettleDebtScreen() {
 
   const [amount, setAmount] = useState(String(debt));
   const [saving, setSaving] = useState(false);
+  const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
   const handleSettle = async () => {
     const value = parseFloat(amount);
@@ -24,6 +26,7 @@ export default function SettleDebtScreen() {
     setSaving(true);
     try {
       await settleCustomerDebt(db, parseInt(id!), value);
+      bumpCustomers();
       router.back();
     } catch (e: any) {
       Alert.alert("Erro", e.message ?? "Falha ao registrar pagamento");
