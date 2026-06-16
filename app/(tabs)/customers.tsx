@@ -11,32 +11,37 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function CustomerCard({ item, onSettle }: { item: Customer; onSettle: (c: Customer) => void }) {
+function CustomerCard({ item, onSettle, onEdit }: { item: Customer; onSettle: (c: Customer) => void; onEdit: (c: Customer) => void }) {
   const hasDebt = item.balance < 0;
   return (
     <View className="bg-white mx-4 mb-2 rounded-xl border border-gray-100 overflow-hidden">
       {hasDebt && <View className="h-0.5 bg-red-400" />}
       <View className="p-4">
         <View className="flex-row items-center justify-between">
-          <View className="flex-1">
+          <TouchableOpacity className="flex-1" onPress={() => onEdit(item)}>
             <Text className="font-bold text-gray-900">{item.name}</Text>
             {item.phone && (
               <Text className="text-xs text-gray-400">{item.phone}</Text>
             )}
-          </View>
-          {hasDebt ? (
-            <TouchableOpacity
-              className="bg-red-500 rounded-lg px-3 py-1.5 ml-2"
-              onPress={() => onSettle(item)}
-            >
-              <Text className="text-white text-xs font-bold">{formatCurrency(Math.abs(item.balance))}</Text>
-              <Text className="text-white text-xs opacity-80 text-center">Pagar</Text>
+          </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            <TouchableOpacity onPress={() => onEdit(item)} className="p-1">
+              <Ionicons name="pencil" size={16} color="#9ca3af" />
             </TouchableOpacity>
-          ) : (
-            <View className="bg-green-100 rounded-lg px-3 py-1.5">
-              <Text className="text-green-700 text-xs font-semibold">Em dia</Text>
-            </View>
-          )}
+            {hasDebt ? (
+              <TouchableOpacity
+                className="bg-red-500 rounded-lg px-3 py-1.5 ml-1"
+                onPress={() => onSettle(item)}
+              >
+                <Text className="text-white text-xs font-bold">{formatCurrency(Math.abs(item.balance))}</Text>
+                <Text className="text-white text-xs opacity-80 text-center">Pagar</Text>
+              </TouchableOpacity>
+            ) : (
+              <View className="bg-green-100 rounded-lg px-3 py-1.5">
+                <Text className="text-green-700 text-xs font-semibold">Em dia</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </View>
@@ -83,6 +88,18 @@ export default function CustomersScreen() {
     router.push({ pathname: "/settle-debt", params: { id: customer.id, name: customer.name, balance: customer.balance } });
   };
 
+  const handleEdit = (customer: Customer) => {
+    router.push({
+      pathname: "/customer-form",
+      params: {
+        id: customer.id,
+        initialName: customer.name,
+        initialPhone: customer.phone ?? "",
+        initialAddress: customer.address ?? "",
+      },
+    });
+  };
+
   const debtors = customers.filter((c) => c.balance < 0);
   const totalDebt = debtors.reduce((acc, c) => acc + Math.abs(c.balance), 0);
 
@@ -91,7 +108,7 @@ export default function CustomersScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <CustomerCard item={item} onSettle={handleSettle} />}
+        renderItem={({ item }) => <CustomerCard item={item} onSettle={handleSettle} onEdit={handleEdit} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">

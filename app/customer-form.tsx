@@ -1,15 +1,23 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
 import { useState } from "react";
-import { router } from "expo-router";
-import { addCustomer } from "@/db/queries/customers";
+import { router, useLocalSearchParams } from "expo-router";
+import { addCustomer, updateCustomer } from "@/db/queries/customers";
 import { useAppStore } from "@/store";
 
 export default function CustomerFormScreen() {
   const db = useSQLiteContext();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const { id, initialName, initialPhone, initialAddress } = useLocalSearchParams<{
+    id?: string;
+    initialName?: string;
+    initialPhone?: string;
+    initialAddress?: string;
+  }>();
+  const isEdit = !!id;
+
+  const [name, setName] = useState(initialName ?? "");
+  const [phone, setPhone] = useState(initialPhone ?? "");
+  const [address, setAddress] = useState(initialAddress ?? "");
   const [saving, setSaving] = useState(false);
   const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
@@ -18,7 +26,19 @@ export default function CustomerFormScreen() {
 
     setSaving(true);
     try {
-      await addCustomer(db, { name: name.trim(), phone: phone.trim() || undefined, address: address.trim() || undefined });
+      if (isEdit) {
+        await updateCustomer(db, parseInt(id!), {
+          name: name.trim(),
+          phone: phone.trim() || undefined,
+          address: address.trim() || undefined,
+        });
+      } else {
+        await addCustomer(db, {
+          name: name.trim(),
+          phone: phone.trim() || undefined,
+          address: address.trim() || undefined,
+        });
+      }
       bumpCustomers();
       router.back();
     } catch (e: any) {
@@ -38,7 +58,7 @@ export default function CustomerFormScreen() {
             placeholder="Nome do cliente"
             value={name}
             onChangeText={setName}
-            autoFocus
+            autoFocus={!isEdit}
           />
         </View>
 
@@ -70,7 +90,9 @@ export default function CustomerFormScreen() {
           onPress={handleSave}
           disabled={saving}
         >
-          <Text className="text-white font-bold text-base">{saving ? "Salvando..." : "Cadastrar Cliente"}</Text>
+          <Text className="text-white font-bold text-base">
+            {saving ? "Salvando..." : isEdit ? "Salvar Alterações" : "Cadastrar Cliente"}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
