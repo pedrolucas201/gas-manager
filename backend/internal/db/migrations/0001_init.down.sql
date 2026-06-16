@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS debt_settlements;
+DROP TABLE IF EXISTS stock_adjustments;
+DROP TABLE IF EXISTS restocks;
+DROP TABLE IF EXISTS sales;
+DROP TABLE IF EXISTS inventory;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS cylinder_types;
+DROP TABLE IF EXISTS users;
