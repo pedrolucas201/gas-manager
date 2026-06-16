@@ -11,14 +11,14 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function CustomerCard({ item, onSettle, onEdit }: { item: Customer; onSettle: (c: Customer) => void; onEdit: (c: Customer) => void }) {
+function CustomerCard({ item, onSettle, onEdit, onDetail }: { item: Customer; onSettle: (c: Customer) => void; onEdit: (c: Customer) => void; onDetail: (c: Customer) => void }) {
   const hasDebt = item.balance < 0;
   return (
     <View className="bg-white mx-4 mb-2 rounded-xl border border-gray-100 overflow-hidden">
       {hasDebt && <View className="h-0.5 bg-red-400" />}
       <View className="p-4">
         <View className="flex-row items-center justify-between">
-          <TouchableOpacity className="flex-1" onPress={() => onEdit(item)}>
+          <TouchableOpacity className="flex-1" onPress={() => onDetail(item)}>
             <Text className="font-bold text-gray-900">{item.name}</Text>
             {item.phone && (
               <Text className="text-xs text-gray-400">{item.phone}</Text>
@@ -100,6 +100,10 @@ export default function CustomersScreen() {
     });
   };
 
+  const handleDetail = (customer: Customer) => {
+    router.push({ pathname: "/customer-detail", params: { id: customer.id } });
+  };
+
   const debtors = customers.filter((c) => c.balance < 0);
   const totalDebt = debtors.reduce((acc, c) => acc + Math.abs(c.balance), 0);
 
@@ -108,7 +112,7 @@ export default function CustomersScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <CustomerCard item={item} onSettle={handleSettle} onEdit={handleEdit} />}
+        renderItem={({ item }) => <CustomerCard item={item} onSettle={handleSettle} onEdit={handleEdit} onDetail={handleDetail} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">

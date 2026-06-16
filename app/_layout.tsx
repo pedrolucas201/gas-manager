@@ -33,6 +33,16 @@ export default function RootLayout() {
             name="settle-debt"
             options={{ headerShown: true, title: "Registrar Pagamento", presentation: "modal" }}
           />
+          <Stack.Screen
+            name="customer-detail"
+            options={{
+              headerShown: true,
+              title: "Cliente",
+              headerStyle: { backgroundColor: "#f97316" },
+              headerTintColor: "#ffffff",
+              headerTitleStyle: { fontWeight: "700" },
+            }}
+          />
         </Stack>
       </SQLiteProvider>
     </Suspense>
