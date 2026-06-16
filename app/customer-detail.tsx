@@ -1,9 +1,9 @@
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Alert } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
 import { useCallback, useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getCustomerById, getCustomerSales } from "@/db/queries/customers";
+import { getCustomerById, getCustomerSales, deleteCustomer } from "@/db/queries/customers";
 import { Customer } from "@/types";
 import { useAppStore } from "@/store";
 
@@ -35,6 +35,7 @@ export default function CustomerDetailScreen() {
   const [sales, setSales] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const customersVersion = useAppStore((s) => s.customersVersion);
+  const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
   const load = useCallback(async () => {
     const [c, s] = await Promise.all([
@@ -56,6 +57,30 @@ export default function CustomerDetailScreen() {
   const totalSpent = sales.reduce((acc, s) => acc + s.total, 0);
   const hasDebt = (customer?.balance ?? 0) < 0;
 
+  const handleDelete = () => {
+    if (!customer) return;
+    Alert.alert(
+      "Excluir cliente",
+      `Tem certeza que deseja excluir "${customer.name}"? As vendas já registradas serão mantidas, mas sem vínculo com o cliente.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteCustomer(db, customer.id);
+              bumpCustomers();
+              router.back();
+            } catch (err) {
+              Alert.alert("Não foi possível excluir", (err as Error).message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView
       className="flex-1 bg-gray-50"
@@ -74,22 +99,27 @@ export default function CustomerDetailScreen() {
                   <Text className="text-sm text-gray-400 mt-0.5">{customer.address}</Text>
                 )}
               </View>
-              <TouchableOpacity
-                className="p-2"
-                onPress={() =>
-                  router.push({
-                    pathname: "/customer-form",
-                    params: {
-                      id: customer.id,
-                      initialName: customer.name,
-                      initialPhone: customer.phone ?? "",
-                      initialAddress: customer.address ?? "",
-                    },
-                  })
-                }
-              >
-                <Ionicons name="pencil" size={18} color="#9ca3af" />
-              </TouchableOpacity>
+              <View className="flex-row items-center gap-1">
+                <TouchableOpacity
+                  className="p-2"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/customer-form",
+                      params: {
+                        id: customer.id,
+                        initialName: customer.name,
+                        initialPhone: customer.phone ?? "",
+                        initialAddress: customer.address ?? "",
+                      },
+                    })
+                  }
+                >
+                  <Ionicons name="pencil" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+                <TouchableOpacity className="p-2" onPress={handleDelete}>
+                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View className="flex-row gap-3 mt-3">

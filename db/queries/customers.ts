@@ -39,6 +39,24 @@ export async function updateCustomer(
   );
 }
 
+export async function deleteCustomer(db: SQLiteDatabase, id: number) {
+  const customer = await db.getFirstAsync<Customer>(
+    `SELECT * FROM customers WHERE id = ?`,
+    [id]
+  );
+  if (!customer) return;
+
+  if (customer.balance < 0) {
+    throw new Error(
+      "Não é possível excluir um cliente com saldo devedor pendente. Quite o débito antes de excluir."
+    );
+  }
+
+  // Preserve sales history, just unlink it from the deleted customer
+  await db.runAsync(`UPDATE sales SET customer_id = NULL WHERE customer_id = ?`, [id]);
+  await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
+}
+
 export async function settleCustomerDebt(
   db: SQLiteDatabase,
   id: number,
