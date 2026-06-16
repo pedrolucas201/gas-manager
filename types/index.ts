@@ -32,6 +32,7 @@ export interface Sale {
   cylinder_type_id: number;
   quantity: number;
   unit_price: number;
+  cost_price: number;
   total: number;
   payment_method: PaymentMethod;
   is_exchange: number;

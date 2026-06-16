@@ -14,7 +14,7 @@ export default function RootLayout() {
         </View>
       }
     >
-      <SQLiteProvider databaseName="gas-manager.db" onInit={initDatabase} useSuspense>
+      <SQLiteProvider databaseName="gas-manager-v2.db" onInit={initDatabase} useSuspense>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen

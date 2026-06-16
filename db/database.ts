@@ -37,6 +37,7 @@ export async function initDatabase(db: SQLiteDatabase) {
       cylinder_type_id INTEGER NOT NULL,
       quantity INTEGER NOT NULL,
       unit_price REAL NOT NULL,
+      cost_price REAL NOT NULL DEFAULT 0,
       total REAL NOT NULL,
       payment_method TEXT NOT NULL,
       is_exchange INTEGER DEFAULT 0,
@@ -68,9 +69,7 @@ async function seedDefaultData(db: SQLiteDatabase) {
 
   await db.execAsync(`
     INSERT INTO cylinder_types (name, weight_kg, sale_price, cost_price) VALUES
-      ('P13', 13, 120.00, 90.00),
-      ('P20', 20, 180.00, 140.00),
-      ('P45', 45, 380.00, 300.00);
+      ('P13', 13, 120.00, 90.00);
 
     INSERT INTO inventory (cylinder_type_id, full_qty, empty_qty)
       SELECT id, 0, 0 FROM cylinder_types;

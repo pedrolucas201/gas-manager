@@ -33,6 +33,8 @@ export default function SaleFormScreen() {
 
   const [selectedCylinder, setSelectedCylinder] = useState<CylinderType | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [unitPrice, setUnitPrice] = useState("0");
+  const [unitCost, setUnitCost] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [isExchange, setIsExchange] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -42,19 +44,27 @@ export default function SaleFormScreen() {
     const [cyl, cust] = await Promise.all([getCylinderTypes(db), getCustomers(db)]);
     setCylinders(cyl);
     setCustomers(cust);
-    if (cyl.length > 0) setSelectedCylinder(cyl[0]);
+    if (cyl.length > 0) selectCylinder(cyl[0]);
   }, [db]);
 
   useEffect(() => { load(); }, [load]);
 
-  const total = selectedCylinder
-    ? (parseInt(quantity) || 0) * selectedCylinder.sale_price
-    : 0;
+  const selectCylinder = (c: CylinderType) => {
+    setSelectedCylinder(c);
+    setUnitPrice(String(c.sale_price));
+    setUnitCost(String(c.cost_price));
+  };
+
+  const total = (parseInt(quantity) || 0) * (parseFloat(unitPrice) || 0);
 
   const handleSave = async () => {
     if (!selectedCylinder) return Alert.alert("Erro", "Selecione um botijão");
     const qty = parseInt(quantity);
     if (!qty || qty <= 0) return Alert.alert("Erro", "Quantidade inválida");
+    const price = parseFloat(unitPrice);
+    if (!price || price <= 0) return Alert.alert("Erro", "Preço de venda inválido");
+    const cost = parseFloat(unitCost);
+    if (cost < 0 || isNaN(cost)) return Alert.alert("Erro", "Custo inválido");
     if (paymentMethod === "fiado" && !selectedCustomer) {
       return Alert.alert("Erro", "Selecione um cliente para venda no fiado");
     }
@@ -65,7 +75,8 @@ export default function SaleFormScreen() {
         customer_id: selectedCustomer?.id ?? null,
         cylinder_type_id: selectedCylinder.id,
         quantity: qty,
-        unit_price: selectedCylinder.sale_price,
+        unit_price: price,
+        cost_price: cost,
         payment_method: paymentMethod,
         is_exchange: isExchange,
       });
@@ -96,7 +107,7 @@ export default function SaleFormScreen() {
                     ? "bg-primary-500 border-primary-500"
                     : "bg-white border-gray-200"
                 }`}
-                onPress={() => setSelectedCylinder(c)}
+                onPress={() => selectCylinder(c)}
               >
                 <Text className={`font-bold text-base ${selectedCylinder?.id === c.id ? "text-white" : "text-gray-900"}`}>
                   {c.name}
@@ -131,6 +142,28 @@ export default function SaleFormScreen() {
             >
               <Text className="text-xl font-bold text-gray-600">+</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Price and cost */}
+        <View className="flex-row gap-3">
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Preço de Venda (R$)</Text>
+            <TextInput
+              className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-gray-900 font-semibold"
+              keyboardType="decimal-pad"
+              value={unitPrice}
+              onChangeText={setUnitPrice}
+            />
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Custo (R$)</Text>
+            <TextInput
+              className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-gray-900 font-semibold"
+              keyboardType="decimal-pad"
+              value={unitCost}
+              onChangeText={setUnitCost}
+            />
           </View>
         </View>
 

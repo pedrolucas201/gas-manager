@@ -8,6 +8,7 @@ export async function registerSale(
     cylinder_type_id: number;
     quantity: number;
     unit_price: number;
+    cost_price: number;
     payment_method: string;
     is_exchange: boolean;
   }
@@ -15,13 +16,14 @@ export async function registerSale(
   const total = data.quantity * data.unit_price;
 
   await db.runAsync(
-    `INSERT INTO sales (customer_id, cylinder_type_id, quantity, unit_price, total, payment_method, is_exchange)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sales (customer_id, cylinder_type_id, quantity, unit_price, cost_price, total, payment_method, is_exchange)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.customer_id,
       data.cylinder_type_id,
       data.quantity,
       data.unit_price,
+      data.cost_price,
       total,
       data.payment_method,
       data.is_exchange ? 1 : 0,
@@ -96,8 +98,8 @@ export async function getReportByPeriod(
        ct.name as cylinder_name,
        SUM(s.quantity) as total_qty,
        SUM(s.total) as total_revenue,
-       SUM(s.quantity * ct.cost_price) as total_cost,
-       SUM(s.total) - SUM(s.quantity * ct.cost_price) as total_profit,
+       SUM(s.quantity * s.cost_price) as total_cost,
+       SUM(s.total) - SUM(s.quantity * s.cost_price) as total_profit,
        s.payment_method,
        COUNT(*) as num_sales
      FROM sales s
