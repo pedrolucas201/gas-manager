@@ -34,7 +34,6 @@ export default function SaleFormScreen() {
   const [selectedCylinder, setSelectedCylinder] = useState<CylinderType | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("0");
-  const [unitCost, setUnitCost] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [isExchange, setIsExchange] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -52,7 +51,6 @@ export default function SaleFormScreen() {
   const selectCylinder = (c: CylinderType) => {
     setSelectedCylinder(c);
     setUnitPrice(String(c.sale_price));
-    setUnitCost(String(c.cost_price));
   };
 
   const total = (parseInt(quantity) || 0) * (parseFloat(unitPrice) || 0);
@@ -63,8 +61,6 @@ export default function SaleFormScreen() {
     if (!qty || qty <= 0) return Alert.alert("Erro", "Quantidade inválida");
     const price = parseFloat(unitPrice);
     if (!price || price <= 0) return Alert.alert("Erro", "Preço de venda inválido");
-    const cost = parseFloat(unitCost);
-    if (cost < 0 || isNaN(cost)) return Alert.alert("Erro", "Custo inválido");
     if (paymentMethod === "fiado" && !selectedCustomer) {
       return Alert.alert("Erro", "Selecione um cliente para venda no fiado");
     }
@@ -76,7 +72,7 @@ export default function SaleFormScreen() {
         cylinder_type_id: selectedCylinder.id,
         quantity: qty,
         unit_price: price,
-        cost_price: cost,
+        cost_price: selectedCylinder.cost_price,
         payment_method: paymentMethod,
         is_exchange: isExchange,
       });
@@ -145,26 +141,15 @@ export default function SaleFormScreen() {
           </View>
         </View>
 
-        {/* Price and cost */}
-        <View className="flex-row gap-3">
-          <View className="flex-1">
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Preço de Venda (R$)</Text>
-            <TextInput
-              className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-gray-900 font-semibold"
-              keyboardType="decimal-pad"
-              value={unitPrice}
-              onChangeText={setUnitPrice}
-            />
-          </View>
-          <View className="flex-1">
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Custo (R$)</Text>
-            <TextInput
-              className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-gray-900 font-semibold"
-              keyboardType="decimal-pad"
-              value={unitCost}
-              onChangeText={setUnitCost}
-            />
-          </View>
+        {/* Price */}
+        <View>
+          <Text className="text-sm font-semibold text-gray-700 mb-2">Preço de Venda (R$)</Text>
+          <TextInput
+            className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-gray-900 font-semibold"
+            keyboardType="decimal-pad"
+            value={unitPrice}
+            onChangeText={setUnitPrice}
+          />
         </View>
 
         {/* Payment method */}
