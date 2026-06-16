@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getSales } from "@/db/queries/sales";
 import { Sale, PaymentMethod } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -61,12 +62,14 @@ export default function SalesScreen() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  const salesVersion = useAppStore((s) => s.salesVersion);
+
   const load = useCallback(async () => {
     const data = await getSales(db);
     setSales(data);
   }, [db]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, salesVersion]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

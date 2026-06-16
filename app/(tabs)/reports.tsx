@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { getReportByPeriod, getDashboardStats } from "@/db/queries/sales";
 import { DashboardStats } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -39,6 +40,8 @@ export default function ReportsScreen() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const salesVersion = useAppStore((s) => s.salesVersion);
+
   const load = useCallback(async () => {
     const { from, to } = getDateRange(period);
     const [reportRows, dashStats] = await Promise.all([
@@ -49,7 +52,7 @@ export default function ReportsScreen() {
     setStats(dashStats);
   }, [db, period]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, salesVersion]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

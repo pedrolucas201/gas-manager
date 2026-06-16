@@ -7,6 +7,7 @@ import { getDashboardStats } from "@/db/queries/sales";
 import { getInventory } from "@/db/queries/inventory";
 import { getDebtors } from "@/db/queries/customers";
 import { DashboardStats, Inventory, Customer } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -29,6 +30,10 @@ export default function DashboardScreen() {
   const [debtors, setDebtors] = useState<Customer[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  const salesVersion = useAppStore((s) => s.salesVersion);
+  const inventoryVersion = useAppStore((s) => s.inventoryVersion);
+  const customersVersion = useAppStore((s) => s.customersVersion);
+
   const load = useCallback(async () => {
     const [s, inv, dbt] = await Promise.all([
       getDashboardStats(db),
@@ -40,7 +45,7 @@ export default function DashboardScreen() {
     setDebtors(dbt);
   }, [db]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, salesVersion, inventoryVersion, customersVersion]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
