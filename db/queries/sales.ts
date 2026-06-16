@@ -106,3 +106,23 @@ export async function getReportByPeriod(
     [from, to]
   );
 }
+
+export async function deleteSale(db: SQLiteDatabase, id: number) {
+  const sale = await db.getFirstAsync<Sale>(`SELECT * FROM sales WHERE id = ?`, [id]);
+  if (!sale) return;
+
+  await db.runAsync(
+    `UPDATE inventory SET full_qty = full_qty + ?, empty_qty = MAX(0, empty_qty - ?)
+     WHERE cylinder_type_id = ?`,
+    [sale.quantity, sale.is_exchange ? sale.quantity : 0, sale.cylinder_type_id]
+  );
+
+  if (sale.payment_method === "fiado" && sale.customer_id) {
+    await db.runAsync(
+      `UPDATE customers SET balance = balance + ? WHERE id = ?`,
+      [sale.total, sale.customer_id]
+    );
+  }
+
+  await db.runAsync(`DELETE FROM sales WHERE id = ?`, [id]);
+}

@@ -1,9 +1,9 @@
-import { View, Text, FlatList, TouchableOpacity, RefreshControl } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
 import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getSales } from "@/db/queries/sales";
+import { getSales, deleteSale } from "@/db/queries/sales";
 import { Sale, PaymentMethod } from "@/types";
 import { useAppStore } from "@/store";
 
@@ -30,7 +30,7 @@ const paymentColors: Record<PaymentMethod, string> = {
   fiado: "bg-red-100 text-red-700",
 };
 
-function SaleCard({ item }: { item: Sale }) {
+function SaleCard({ item, onDelete }: { item: Sale; onDelete: (id: number) => void }) {
   const colors = paymentColors[item.payment_method];
   const [bg, txt] = colors.split(" ");
   return (
@@ -45,7 +45,12 @@ function SaleCard({ item }: { item: Sale }) {
             <Text className="text-xs text-gray-500">{item.customer_name}</Text>
           )}
         </View>
-        <Text className="font-bold text-gray-900 text-base">{formatCurrency(item.total)}</Text>
+        <View className="flex-row items-center gap-3">
+          <Text className="font-bold text-gray-900 text-base">{formatCurrency(item.total)}</Text>
+          <TouchableOpacity onPress={() => onDelete(item.id)} className="p-1">
+            <Ionicons name="trash-outline" size={16} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
       <View className="flex-row items-center justify-between mt-2">
         <Text className="text-xs text-gray-400">{formatDate(item.created_at)}</Text>
@@ -61,8 +66,10 @@ export default function SalesScreen() {
   const db = useSQLiteContext();
   const [sales, setSales] = useState<Sale[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-
   const salesVersion = useAppStore((s) => s.salesVersion);
+  const bumpSales = useAppStore((s) => s.bumpSales);
+  const bumpInventory = useAppStore((s) => s.bumpInventory);
+  const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
   const load = useCallback(async () => {
     const data = await getSales(db);
@@ -77,12 +84,32 @@ export default function SalesScreen() {
     setRefreshing(false);
   }, [load]);
 
+  const handleDelete = (id: number) => {
+    Alert.alert(
+      "Cancelar venda",
+      "Deseja cancelar esta venda? O estoque e o saldo do cliente serão restaurados.",
+      [
+        { text: "Não", style: "cancel" },
+        {
+          text: "Cancelar venda",
+          style: "destructive",
+          onPress: async () => {
+            await deleteSale(db, id);
+            bumpSales();
+            bumpInventory();
+            bumpCustomers();
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View className="flex-1 bg-gray-50">
       <FlatList
         data={sales}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <SaleCard item={item} />}
+        renderItem={({ item }) => <SaleCard item={item} onDelete={handleDelete} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">
