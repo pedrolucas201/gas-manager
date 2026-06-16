@@ -9,6 +9,7 @@ import { getCylinderTypes } from "@/db/queries/inventory";
 import { getCustomers } from "@/db/queries/customers";
 import { registerSale } from "@/db/queries/sales";
 import { CylinderType, Customer, PaymentMethod } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -25,6 +26,10 @@ export default function SaleFormScreen() {
   const db = useSQLiteContext();
   const [cylinders, setCylinders] = useState<CylinderType[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+
+  const bumpSales = useAppStore((s) => s.bumpSales);
+  const bumpInventory = useAppStore((s) => s.bumpInventory);
+  const bumpCustomers = useAppStore((s) => s.bumpCustomers);
 
   const [selectedCylinder, setSelectedCylinder] = useState<CylinderType | null>(null);
   const [quantity, setQuantity] = useState("1");
@@ -64,6 +69,9 @@ export default function SaleFormScreen() {
         payment_method: paymentMethod,
         is_exchange: isExchange,
       });
+      bumpSales();
+      bumpInventory();
+      if (paymentMethod === "fiado") bumpCustomers();
       router.back();
     } catch (e: any) {
       Alert.alert("Erro", e.message ?? "Falha ao registrar venda");
