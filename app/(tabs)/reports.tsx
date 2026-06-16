@@ -75,6 +75,11 @@ export default function ReportsScreen() {
     paymentTotals[r.payment_method] = (paymentTotals[r.payment_method] ?? 0) + r.total_revenue;
   });
 
+  const totalRevenue = rows.reduce((acc: number, r: any) => acc + r.total_revenue, 0);
+  const totalCost = rows.reduce((acc: number, r: any) => acc + r.total_cost, 0);
+  const totalProfit = totalRevenue - totalCost;
+  const margin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
   const paymentLabels: Record<string, string> = {
     cash: "Dinheiro",
     pix: "PIX",
@@ -112,6 +117,23 @@ export default function ReportsScreen() {
           <Text className="text-white opacity-70 text-sm mt-1">{currentSales ?? 0} botijões vendidos</Text>
         </View>
 
+        {rows.length > 0 && (
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1 bg-white rounded-2xl border border-gray-100 p-4">
+              <Text className="text-xs text-gray-500 font-medium mb-1">Lucro</Text>
+              <Text className={`text-xl font-bold ${totalProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
+                {formatCurrency(totalProfit)}
+              </Text>
+            </View>
+            <View className="flex-1 bg-white rounded-2xl border border-gray-100 p-4">
+              <Text className="text-xs text-gray-500 font-medium mb-1">Margem</Text>
+              <Text className={`text-xl font-bold ${margin >= 0 ? "text-green-700" : "text-red-600"}`}>
+                {margin.toFixed(1)}%
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* By payment method */}
         {Object.keys(paymentTotals).length > 0 && (
           <>
@@ -136,20 +158,21 @@ export default function ReportsScreen() {
             <Text className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Por Botijão</Text>
             <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">
               {Object.entries(
-                rows.reduce((acc: Record<string, { qty: number; revenue: number }>, r: any) => {
-                  acc[r.cylinder_name] = acc[r.cylinder_name] ?? { qty: 0, revenue: 0 };
+                rows.reduce((acc: Record<string, { qty: number; revenue: number; profit: number }>, r: any) => {
+                  acc[r.cylinder_name] = acc[r.cylinder_name] ?? { qty: 0, revenue: 0, profit: 0 };
                   acc[r.cylinder_name].qty += r.total_qty;
                   acc[r.cylinder_name].revenue += r.total_revenue;
+                  acc[r.cylinder_name].profit += r.total_profit;
                   return acc;
                 }, {})
-              ).map(([name, { qty, revenue }], idx, arr) => (
+              ).map(([name, { qty, revenue, profit }], idx, arr) => (
                 <View
                   key={name}
                   className={`px-4 py-3 flex-row items-center justify-between ${idx < arr.length - 1 ? "border-b border-gray-100" : ""}`}
                 >
                   <View>
                     <Text className="text-gray-700 font-medium">{name}</Text>
-                    <Text className="text-xs text-gray-400">{qty} unidades</Text>
+                    <Text className="text-xs text-gray-400">{qty} un · lucro {formatCurrency(profit)}</Text>
                   </View>
                   <Text className="font-bold text-gray-900">{formatCurrency(revenue)}</Text>
                 </View>

@@ -96,6 +96,8 @@ export async function getReportByPeriod(
        ct.name as cylinder_name,
        SUM(s.quantity) as total_qty,
        SUM(s.total) as total_revenue,
+       SUM(s.quantity * ct.cost_price) as total_cost,
+       SUM(s.total) - SUM(s.quantity * ct.cost_price) as total_profit,
        s.payment_method,
        COUNT(*) as num_sales
      FROM sales s
