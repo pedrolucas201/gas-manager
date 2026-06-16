@@ -57,6 +57,7 @@ export default function InventoryScreen() {
     const empty = parseInt(editEmpty) || 0;
     await updateInventory(db, cylinder_type_id, full, empty);
     setEditing(null);
+    bumpInventory();
     await load();
   };
 

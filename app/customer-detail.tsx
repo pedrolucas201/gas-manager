@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getCustomerById, getCustomerSales } from "@/db/queries/customers";
 import { Customer } from "@/types";
+import { useAppStore } from "@/store";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -33,6 +34,7 @@ export default function CustomerDetailScreen() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [sales, setSales] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const customersVersion = useAppStore((s) => s.customersVersion);
 
   const load = useCallback(async () => {
     const [c, s] = await Promise.all([
@@ -43,7 +45,7 @@ export default function CustomerDetailScreen() {
     setSales(s as any[]);
   }, [db, id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, customersVersion]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
