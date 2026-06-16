@@ -1,0 +1,7 @@
+# build
+/server
+/bin/
+# env
+.env
+# go
+*.out
