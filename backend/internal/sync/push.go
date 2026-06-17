@@ -2,7 +2,9 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -10,12 +12,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/pedrogomesdev/gas-manager-backend/internal/auth"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/db/gen"
+	"github.com/pedrogomesdev/gas-manager-backend/internal/httpx"
 )
 
 type Service struct{ pool *pgxpool.Pool }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
+
+// HandlePush decodes a /sync/push batch, applies it for the authenticated user,
+// and returns the per-event results.
+func (s *Service) HandlePush(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Events []PushEvent `json:"events"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	uid := auth.UserID(r.Context())
+	results, _ := s.Push(r.Context(), uid, req.Events)
+	httpx.JSON(w, http.StatusOK, map[string]any{"results": results})
+}
 
 func (s *Service) Push(ctx context.Context, userID string, events []PushEvent) ([]PushResult, error) {
 	out := make([]PushResult, 0, len(events))
