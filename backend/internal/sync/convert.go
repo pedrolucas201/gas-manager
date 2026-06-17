@@ -19,3 +19,7 @@ func numeric(s string) pgtype.Numeric {
 }
 
 func toTime(t pgtype.Timestamptz) time.Time { return t.Time }
+
+func timestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}
