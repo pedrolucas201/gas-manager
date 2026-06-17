@@ -49,6 +49,7 @@ func run() error {
 		catalog.NewService(pool),
 		alerts.NewService(pool),
 		authMW,
+		pool.Ping,
 	)
 
 	log.Printf("listening on :%s", cfg.Port)
@@ -60,10 +61,25 @@ func newRouter(
 	catalogSvc *catalog.Service,
 	alertsSvc *alerts.Service,
 	authMW func(http.Handler) http.Handler,
+	ready func(context.Context) error,
 ) http.Handler {
 	r := chi.NewRouter()
 
+	// Liveness: process is up. (Note: the *.run.app Google Frontend swallows
+	// the literal /healthz path, so this is reachable in tests/liveness probes
+	// but not over the public URL — use /readyz for external checks.)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Readiness: process is up AND the database is reachable.
+	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
+		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+		defer cancel()
+		if err := ready(ctx); err != nil {
+			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
