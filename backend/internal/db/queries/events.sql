@@ -8,9 +8,9 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 RETURNING sequence, server_received_at;
 
 -- name: BumpInventoryForSale :exec
-UPDATE inventory SET full_qty = full_qty - $2,
-  empty_qty = empty_qty + (CASE WHEN $3 THEN $2 ELSE 0 END)
-WHERE cylinder_type_id = $1;
+UPDATE inventory SET full_qty = full_qty - sqlc.arg(quantity)::int,
+  empty_qty = empty_qty + (CASE WHEN sqlc.arg(is_exchange)::boolean THEN sqlc.arg(quantity)::int ELSE 0 END)
+WHERE cylinder_type_id = sqlc.arg(cylinder_type_id);
 
 -- name: BumpCustomerBalance :exec
 UPDATE customers SET balance = balance + $2 WHERE id = $1;
@@ -38,9 +38,9 @@ RETURNING sequence, server_received_at;
 
 -- name: BumpInventoryField :exec
 UPDATE inventory
-SET full_qty  = full_qty  + (CASE WHEN $2 = 'full'  THEN $3 ELSE 0 END),
-    empty_qty = empty_qty + (CASE WHEN $2 = 'empty' THEN $3 ELSE 0 END)
-WHERE cylinder_type_id = $1;
+SET full_qty  = full_qty  + (CASE WHEN sqlc.arg(field)::text = 'full'  THEN sqlc.arg(delta)::int ELSE 0 END),
+    empty_qty = empty_qty + (CASE WHEN sqlc.arg(field)::text = 'empty' THEN sqlc.arg(delta)::int ELSE 0 END)
+WHERE cylinder_type_id = sqlc.arg(cylinder_type_id);
 
 -- name: GetDebtSettlementByID :one
 SELECT id, payload_hash FROM debt_settlements WHERE id = $1;

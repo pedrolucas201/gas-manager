@@ -27,36 +27,36 @@ func (q *Queries) BumpCustomerBalance(ctx context.Context, arg BumpCustomerBalan
 
 const bumpInventoryField = `-- name: BumpInventoryField :exec
 UPDATE inventory
-SET full_qty  = full_qty  + (CASE WHEN $2 = 'full'  THEN $3 ELSE 0 END),
-    empty_qty = empty_qty + (CASE WHEN $2 = 'empty' THEN $3 ELSE 0 END)
-WHERE cylinder_type_id = $1
+SET full_qty  = full_qty  + (CASE WHEN $1::text = 'full'  THEN $2::int ELSE 0 END),
+    empty_qty = empty_qty + (CASE WHEN $1::text = 'empty' THEN $2::int ELSE 0 END)
+WHERE cylinder_type_id = $3
 `
 
 type BumpInventoryFieldParams struct {
+	Field          string
+	Delta          int32
 	CylinderTypeID pgtype.UUID
-	Column2        interface{}
-	FullQty        int32
 }
 
 func (q *Queries) BumpInventoryField(ctx context.Context, arg BumpInventoryFieldParams) error {
-	_, err := q.db.Exec(ctx, bumpInventoryField, arg.CylinderTypeID, arg.Column2, arg.FullQty)
+	_, err := q.db.Exec(ctx, bumpInventoryField, arg.Field, arg.Delta, arg.CylinderTypeID)
 	return err
 }
 
 const bumpInventoryForSale = `-- name: BumpInventoryForSale :exec
-UPDATE inventory SET full_qty = full_qty - $2,
-  empty_qty = empty_qty + (CASE WHEN $3 THEN $2 ELSE 0 END)
-WHERE cylinder_type_id = $1
+UPDATE inventory SET full_qty = full_qty - $1::int,
+  empty_qty = empty_qty + (CASE WHEN $2::boolean THEN $1::int ELSE 0 END)
+WHERE cylinder_type_id = $3
 `
 
 type BumpInventoryForSaleParams struct {
+	Quantity       int32
+	IsExchange     bool
 	CylinderTypeID pgtype.UUID
-	FullQty        int32
-	EmptyQty       int32
 }
 
 func (q *Queries) BumpInventoryForSale(ctx context.Context, arg BumpInventoryForSaleParams) error {
-	_, err := q.db.Exec(ctx, bumpInventoryForSale, arg.CylinderTypeID, arg.FullQty, arg.EmptyQty)
+	_, err := q.db.Exec(ctx, bumpInventoryForSale, arg.Quantity, arg.IsExchange, arg.CylinderTypeID)
 	return err
 }
 
