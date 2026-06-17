@@ -50,10 +50,13 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 
 func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	path := filepath.Join("..", "db", "migrations", "0001_init.up.sql")
-	sql := readFile(t, path)
-	if _, err := pool.Exec(context.Background(), sql); err != nil {
-		t.Fatalf("migrate: %v", err)
+	ctx := context.Background()
+	for _, name := range []string{"0001_init.up.sql", "0002_sync_errors.up.sql"} {
+		path := filepath.Join("..", "db", "migrations", name)
+		sql := readFile(t, path)
+		if _, err := pool.Exec(ctx, sql); err != nil {
+			t.Fatalf("migrate %s: %v", name, err)
+		}
 	}
 }
 

@@ -94,6 +94,15 @@ type StockAdjustment struct {
 	Sequence         int64
 }
 
+type SyncError struct {
+	ID        int64
+	EventID   string
+	EventKind string
+	UserID    string
+	ErrorCode string
+	CreatedAt pgtype.Timestamptz
+}
+
 type User struct {
 	ID            string
 	Name          string

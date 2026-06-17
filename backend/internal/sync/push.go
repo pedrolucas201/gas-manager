@@ -45,6 +45,23 @@ func (s *Service) Push(ctx context.Context, userID string, events []PushEvent) (
 }
 
 func (s *Service) pushOne(ctx context.Context, userID string, e PushEvent) PushResult {
+	result := s.pushOneInner(ctx, userID, e)
+	if result.Status == "error" {
+		s.logSyncError(ctx, e.ID, e.Kind, userID, result.Error)
+	}
+	return result
+}
+
+func (s *Service) logSyncError(ctx context.Context, eventID, eventKind, userID, errorCode string) {
+	_ = gen.New(s.pool).InsertSyncError(ctx, gen.InsertSyncErrorParams{
+		EventID:   eventID,
+		EventKind: eventKind,
+		UserID:    userID,
+		ErrorCode: errorCode,
+	})
+}
+
+func (s *Service) pushOneInner(ctx context.Context, userID string, e PushEvent) PushResult {
 	hash := PayloadHash(e)
 
 	// Idempotency / collision check (read committed; same id is unique PK).
@@ -77,6 +94,36 @@ func (s *Service) pushOne(ctx context.Context, userID string, e PushEvent) PushR
 		return PushResult{ID: e.ID, Status: "error", Error: "commit_failed"}
 	}
 	return PushResult{ID: e.ID, Status: "applied", Sequence: &seq, ServerReceivedAt: &recvAt}
+}
+
+// HandleSyncErrors serves GET /sync/errors — returns the most recent error log entries.
+func (s *Service) HandleSyncErrors(w http.ResponseWriter, r *http.Request) {
+	limit := parseLimit(r.URL.Query().Get("limit"), 100)
+	rows, err := gen.New(s.pool).RecentSyncErrors(r.Context(), int32(limit))
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "query_failed")
+		return
+	}
+	type item struct {
+		ID        int64  `json:"id"`
+		EventID   string `json:"event_id"`
+		EventKind string `json:"event_kind"`
+		UserID    string `json:"user_id"`
+		ErrorCode string `json:"error_code"`
+		CreatedAt string `json:"created_at"`
+	}
+	out := make([]item, len(rows))
+	for i, r := range rows {
+		out[i] = item{
+			ID:        r.ID,
+			EventID:   r.EventID,
+			EventKind: r.EventKind,
+			UserID:    r.UserID,
+			ErrorCode: r.ErrorCode,
+			CreatedAt: r.CreatedAt.Time.Format(time.RFC3339),
+		}
+	}
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 func isUniqueViolation(err error) bool {
