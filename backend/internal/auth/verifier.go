@@ -19,8 +19,11 @@ var ErrInvalidToken = errors.New("invalid firebase token")
 type firebaseVerifier struct{ client *fbauth.Client }
 
 func NewFirebaseVerifier(ctx context.Context, projectID, credsFile string) (Verifier, error) {
-	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: projectID},
-		option.WithCredentialsFile(credsFile))
+	var opts []option.ClientOption
+	if credsFile != "" {
+		opts = append(opts, option.WithCredentialsFile(credsFile))
+	}
+	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: projectID}, opts...)
 	if err != nil {
 		return nil, err
 	}
