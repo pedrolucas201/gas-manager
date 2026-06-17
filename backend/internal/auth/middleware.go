@@ -61,3 +61,8 @@ func UserID(ctx context.Context) string {
 	v, _ := ctx.Value(userIDKey).(string)
 	return v
 }
+
+// WithUserID injects a user id into ctx — used in tests to bypass middleware.
+func WithUserID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, userIDKey, id)
+}
