@@ -11,6 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const ensureUser = `-- name: EnsureUser :one
+INSERT INTO users (id, name, role)
+VALUES ($1, $1, 'employee')
+ON CONFLICT (id) DO UPDATE SET id = users.id
+RETURNING id, active, deactivated_at
+`
+
+type EnsureUserRow struct {
+	ID            string
+	Active        bool
+	DeactivatedAt pgtype.Timestamptz
+}
+
+// Auto-provision an authenticated-but-unknown Firebase UID as a new active
+// user (no RBAC; any linked phone may feed the shared base). The no-op
+// DO UPDATE lets RETURNING fire on conflict without resurrecting a
+// deactivated user (active/deactivated_at are left untouched).
+func (q *Queries) EnsureUser(ctx context.Context, id string) (EnsureUserRow, error) {
+	row := q.db.QueryRow(ctx, ensureUser, id)
+	var i EnsureUserRow
+	err := row.Scan(&i.ID, &i.Active, &i.DeactivatedAt)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, active, deactivated_at FROM users WHERE id = $1
 `

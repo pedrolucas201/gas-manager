@@ -14,7 +14,6 @@ import (
 	"github.com/pedrogomesdev/gas-manager-backend/internal/auth"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/catalog"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/config"
-	"github.com/pedrogomesdev/gas-manager-backend/internal/db/gen"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/sync"
 )
 
@@ -43,7 +42,7 @@ func run() error {
 		return err
 	}
 
-	authMW := auth.Middleware(verifier, pgUserLoader{pool}, time.Now)
+	authMW := auth.Middleware(verifier, auth.NewDBUserLoader(pool), time.Now)
 
 	router := newRouter(
 		sync.NewService(pool),
@@ -80,19 +79,4 @@ func newRouter(
 	})
 
 	return r
-}
-
-type pgUserLoader struct{ pool *pgxpool.Pool }
-
-func (l pgUserLoader) LoadUser(ctx context.Context, uid string) (auth.UserRow, error) {
-	u, err := gen.New(l.pool).GetUser(ctx, uid)
-	if err != nil {
-		return auth.UserRow{}, err
-	}
-	row := auth.UserRow{ID: u.ID, Active: u.Active}
-	if u.DeactivatedAt.Valid {
-		t := u.DeactivatedAt.Time
-		row.DeactivatedAt = &t
-	}
-	return row, nil
 }
