@@ -54,7 +54,7 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		anyFull = true
 	}
 	for _, r := range sales {
-		events = append(events, Event{Kind: "sale", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: r})
+		events = append(events, Event{Kind: "sale", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapSaleRow(r)})
 	}
 
 	restocks, err := q.PullRestocks(ctx, gen.PullRestocksParams{Sequence: c.Restock, Limit: limit})
@@ -65,7 +65,7 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		anyFull = true
 	}
 	for _, r := range restocks {
-		events = append(events, Event{Kind: "restock", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: r})
+		events = append(events, Event{Kind: "restock", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapRestockRow(r)})
 	}
 
 	adjustments, err := q.PullStockAdjustments(ctx, gen.PullStockAdjustmentsParams{Sequence: c.Adjust, Limit: limit})
@@ -76,7 +76,7 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		anyFull = true
 	}
 	for _, r := range adjustments {
-		events = append(events, Event{Kind: "stock_adjustment", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: r})
+		events = append(events, Event{Kind: "stock_adjustment", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapStockAdjRow(r)})
 	}
 
 	settlements, err := q.PullDebtSettlements(ctx, gen.PullDebtSettlementsParams{Sequence: c.Settle, Limit: limit})
@@ -87,7 +87,7 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		anyFull = true
 	}
 	for _, r := range settlements {
-		events = append(events, Event{Kind: "debt_settlement", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: r})
+		events = append(events, Event{Kind: "debt_settlement", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapDebtSettlementRow(r)})
 	}
 
 	sort.SliceStable(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
