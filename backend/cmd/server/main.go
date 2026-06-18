@@ -91,6 +91,7 @@ func newRouter(
 		r.Get("/sync/errors", syncSvc.HandleSyncErrors)
 		r.Put("/catalog/customers", catalogSvc.HandleUpsertCustomer)
 		r.Delete("/catalog/customers/{id}", catalogSvc.HandleDeleteCustomer)
+		r.Put("/catalog/cylinder-types/{id}", catalogSvc.HandleUpdateCylinderType)
 		r.Get("/alerts/negative-stock", alertsSvc.HandleNegativeStock)
 		r.Get("/alerts/over-limit-balance", alertsSvc.HandleOverLimitBalance)
 	})

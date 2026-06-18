@@ -27,6 +27,39 @@ func TestDeleteCustomer_BlockedLeavesSalesLinked(t *testing.T) {
 	}
 }
 
+func TestUpdateCylinderType_StaleUpdateIgnored(t *testing.T) {
+	pool := newCatalogTestDB(t)
+	svc := NewService(pool)
+	old := time.Now().Add(-time.Hour)
+	// seeded P13 has updated_at = now(); an older write must not overwrite price.
+	err := svc.UpdateCylinderType(context.Background(), seedType,
+		CylinderTypeInput{SalePrice: "999.00", CostPrice: "900.00", Active: true, UpdatedAt: old})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	var price float64
+	pool.QueryRow(context.Background(), `SELECT sale_price FROM cylinder_types WHERE id=$1`, seedType).Scan(&price)
+	if price == 999 {
+		t.Fatal("stale LWW write must be ignored")
+	}
+}
+
+func TestUpdateCylinderType_FreshUpdateApplies(t *testing.T) {
+	pool := newCatalogTestDB(t)
+	svc := NewService(pool)
+	fresh := time.Now().Add(time.Hour)
+	err := svc.UpdateCylinderType(context.Background(), seedType,
+		CylinderTypeInput{SalePrice: "150.00", CostPrice: "100.00", Active: true, UpdatedAt: fresh})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	var price float64
+	pool.QueryRow(context.Background(), `SELECT sale_price FROM cylinder_types WHERE id=$1`, seedType).Scan(&price)
+	if price != 150 {
+		t.Fatalf("fresh LWW write should apply, got %v", price)
+	}
+}
+
 func TestUpsertCustomer_StaleUpdateIgnored(t *testing.T) {
 	pool := newCatalogTestDB(t)
 	svc := NewService(pool)

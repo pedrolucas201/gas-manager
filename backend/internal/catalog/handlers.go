@@ -86,6 +86,42 @@ func (s *Service) HandleUpsertCustomer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type CylinderTypeInput struct {
+	SalePrice string    `json:"sale_price"`
+	CostPrice string    `json:"cost_price"`
+	Active    bool      `json:"active"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UpdateCylinderType applies a last-write-wins price/cost/active edit to a
+// cylinder type. The underlying query only overwrites when the incoming
+// UpdatedAt is newer. The row is expected to already exist (seeded P13).
+func (s *Service) UpdateCylinderType(ctx context.Context, id string, in CylinderTypeInput) error {
+	q := gen.New(s.pool)
+	return q.UpdateCylinderType(ctx, gen.UpdateCylinderTypeParams{
+		ID:        pgconv.MustUUID(id),
+		SalePrice: pgconv.Numeric(in.SalePrice),
+		CostPrice: pgconv.Numeric(in.CostPrice),
+		Active:    in.Active,
+		UpdatedAt: pgconv.Timestamptz(in.UpdatedAt),
+	})
+}
+
+// HandleUpdateCylinderType serves PUT /catalog/cylinder-types/{id}.
+func (s *Service) HandleUpdateCylinderType(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in CylinderTypeInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.UpdateCylinderType(r.Context(), id, in); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "update_failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleDeleteCustomer serves DELETE /customers/{id}.
 func (s *Service) HandleDeleteCustomer(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
