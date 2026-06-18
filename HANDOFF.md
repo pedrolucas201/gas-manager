@@ -1,62 +1,65 @@
-# Handoff: Backend gas-manager DEPLOYADO em produção (Cloud Run + Supabase)
+# Handoff: sub-projeto #3 (sync mobile) — Fase 3 concluída + Gap 1 do /sync/pull fechado
 
-**Data:** 2026-06-17
-**Status:** concluído (sub-projeto #2 — backend) — em produção e verificado. Próximo: sub-projeto #3 (integração mobile + Firebase Auth), em outra sessão.
+**Data:** 2026-06-18 (sessão 2)
+**Status:** em andamento. Fases 0–3 prontas e revisadas. O lado de pull do backend tem 3 gaps (descobertos nesta sessão); **Gap 1 fechado**, faltam Gap 2 e Gap 3 antes de ligar o SyncEngine (Fase 4). Execução dividida em sessões a pedido do usuário.
 
 ## 1. Objetivo
-Concluir e **fazer o deploy** do backend na nuvem do gas-manager (sub-projeto #2 de 4): API Go + Postgres, para destravar multi-dispositivo (3 funcionários), proteção contra perda de dados e acesso web/PC. Nesta sessão: fechar o bootstrap, decidir/provisionar a infra de banco e nuvem, e subir o serviço.
+Tornar o app multi-dispositivo para os 3 funcionários: login Firebase (e-mail/senha, sessão persistente) + sync offline-first (push/pull) contra o backend Go já no ar. Plano completo: `docs/superpowers/plans/2026-06-17-mobile-sync-integration.md` (Fases 0–7).
 
 ## 2. Contexto essencial
-- **Stack backend:** Go 1.25, chi, pgx v5, sqlc, golang-migrate, Firebase Admin SDK (auth), testcontainers-go. Módulo `github.com/pedrogomesdev/gas-manager-backend`, código em `backend/`.
-- **Arquitetura (ledger pattern):** tabelas de fato append-only (`sales`, `restocks`, `stock_adjustments`, `debt_settlements`) com UUID do cliente + agregados mutáveis (`inventory.full_qty/empty_qty`, `customers.balance`) por incremento atômico na mesma tx. Pull paginado por `BIGSERIAL sequence`. `payload_hash` contra colisão de UUID. Auth Firebase com janela de carência 14d.
-- **Decisões de infra fechadas nesta sessão (debate TL + QA via subagentes):**
-  - **Banco = Supabase Postgres (free)**, NÃO Cloud SQL (~US$8-10/mês, descartado — usuário não paga). NÃO Neon (usuário não quis). NÃO Firestore/RTDB (reescreveria o backend, ruim p/ relatórios, riscos de integridade no hot-doc/cursor). Combo final: **Firebase Auth (login) + Firebase FCM (tempo real futuro) + Supabase (Postgres) + Cloud Run (Go)** — zero reescrita.
-  - **Tempo real "ver venda do colega"** = futuro, via **FCM** (sub-projeto #3); Postgres continua fonte de verdade.
-- **Convenção de commit:** PT, sem `Co-Authored-By` e sem menção ao Claude.
-- **Regra do usuário (importante):** "sempre teste tudo e debata com TL + QA" — toda tarefa de código: rodar `go test ./...` (com Docker p/ testcontainers) + revisar o diff com 2 subagentes (TL + QA) antes de fechar.
+- **App:** Expo **SDK 54** (RN 0.81), expo-sqlite, zustand, NativeWind. `firebase@12.15.0` + `@react-native-async-storage/async-storage@2.2.0`. Testes: jest 29 + ts-jest + better-sqlite3 (harness Node).
+- **Backend (no ar):** Go 1.25 + chi + pgx + sqlc, Cloud Run `gas-backend` (`southamerica-east1`, projeto GCP `gas-manager-499616`), Supabase Postgres. Padrão **ledger** (fatos append-only + agregados por incremento). URL: `https://gas-backend-750551393506.southamerica-east1.run.app`. Pull paginado por cursor `sequence` (base64).
+- **Ambiente desta máquina:** Go 1.25.5, Docker 27.3.1, gcloud presentes → backend testa (testcontainers) e deploya daqui. `git` só via PowerShell (no Bash tool dá "command not found").
+- **Convenções de dinheiro/sinal:**
+  - Dinheiro trafega como **string** decimal (DTOs Go e app).
+  - **Saldo:** servidor (Postgres) usa **positivo = dívida**; app (SQLite) usa **negativo = dívida**. `apply.ts` traduz: fiado→`balance-total`, quitação→`balance+amount`, void→`balance+total`.
+- **Regras do usuário (MANDATÓRIO):** commits em PT **sem menção ao Claude/IA**; testar tudo + revisão TL/QA por subagentes a cada task; executar planos via subagent-driven-development. `AGENTS.md` está **desatualizado** (manda docs Expo v56; o projeto é SDK 54 — seguir v54).
 
 ## 3. O que já foi feito (nesta sessão, branch `feat/backend`)
-1. **Bootstrap** (commit `26f227a`): migration `0003_seed_p13` (seed P13 + linha de inventory, idempotente) + `DBUserLoader` que auto-provisiona UID Firebase desconhecido como usuário ativo (sem RBAC) via query `EnsureUser` idempotente que não ressuscita desativado. Troca o `pgUserLoader` inline do `main.go` por `auth.NewDBUserLoader(pool)`.
-2. **Cobertura de testes do bootstrap** (commit `48c8016`, vinda da revisão TL+QA): `migrations_test.go` (seed aplica / idempotente em re-run / down reverte) + `dbloader_test.go` (idempotência, não-ressurreição no próprio `ON CONFLICT`, concorrência com 8 goroutines → 1 linha).
-3. **Provisionamento da infra:**
-   - **Supabase** (projeto `gas-manager`, ref `aealxmiyotyeoutlqljy`, região São Paulo). Migrations 0001→0003 aplicadas via `psql` (o `migrate` CLI quebra com path no Windows). `schema_migrations` criado manualmente na v3. Seed P13 verificado. Data API REST do Supabase desligada.
-   - **GCP `gas-manager-499616`:** billing vinculado (account `01A494-ADB080-78A0CB`; desvinculei 2 projetos de teste `centered-center-441514-v3` e `vibrant-tiger-441616-i5` p/ liberar cota — mantido `maps-route-495614`). APIs habilitadas: run, cloudbuild, artifactregistry, secretmanager, billingbudgets. Secret `DATABASE_URL` criado, acesso dado à SA `750551393506-compute@`.
-4. **Deploy** no Cloud Run (`gcloud run deploy gas-backend --source backend ...`). Smoke test revelou que o **Google Frontend engole `/healthz`** → adicionei **`/readyz`** (commit `1516b0d`) com `pool.Ping`, testes (200/503/público/deadline), redeploy. `/readyz` live = **200** → conexão Cloud Run→Supabase **verificada**.
-5. **Alerta de orçamento** GCP criado (R$5, avisos em R$1/2,50/4,50/5) escopado ao projeto.
+
+### Fase 3 — Firebase + auth + cliente HTTP (CONCLUÍDA, revisada TL/QA)
+- `f76bcb9`,`a07cfa7`,`27ea632` — `lib/firebase.ts` (app + `auth` singleton com persistência **AsyncStorage**, guard de env var, guard de Fast Refresh) + `lib/auth.ts` (signIn/signOutUser/onAuthChange/getIdToken, erros em PT).
+- `50c38c4`,`36a4f92` — `lib/api.ts` (`request()` com bearer + classes `AuthError`/`NetworkError`/`ApiError` + 6 funções: pushEvents, pullPage, upsertCustomer, deleteCustomer, upsertCylinderType, voidSale; dinheiro string; parse seguro do body).
+- `a6315c8` — `lib/sync/apply.ts` (**PROVISÓRIO** — ver §4/§6) + 30 testes.
+- Validado: `npm test` 37/37 verde antes do apply.ts; `npx tsc --noEmit` só com os 6 erros pré-existentes em `components/`.
+
+### Fase 4 — Gap 1 do /sync/pull (CONCLUÍDO, revisado TL/QA; SEM redeploy)
+Ao ligar o `apply.ts` (1º consumidor real do pull) descobri que o pull nunca foi exercido por cliente. 3 gaps confirmados na fonte (memória `project_pull_gaps`):
+- **Gap 1 — formato do wire** ✅ FECHADO. `pull.go` serializava struct cru do sqlc → PascalCase + `pgtype.Numeric`. Corrigido com DTO limpo (snake_case, dinheiro string, uuid string, RFC3339, nuláveis→null) para as 4 streams de ledger.
+  - `bb2ec57` — `backend/internal/sync/pull_dto.go` (DTOs + mappers) + wiring no `pull.go`.
+  - `3ffea39` — unifica conversores no `pgconv` (deleguei `uuidToWire`/`numericToWire`) + guard NaN/Inf + testes exatos de string.
+  - Validado por mim: `go build`/`go vet` limpos; `go test ./internal/sync/ ./internal/pgconv/` **verde** (~40s, testcontainers). Revisão spec ✅ + qualidade ✅. (O code review apontou um "bug de padding" no `pgconv.UUIDToString` que **não existe** — `%x` sobre `[]byte` já zero-padeia cada byte; locked com teste.)
+- **Gap 2 — void não propaga** ⏳ PENDENTE (decidido). `VoidSale` não muda `sequence` → cancelamento nunca chega nos outros aparelhos; não há kind `void_sale` no pull. **Decisão:** void = fato append-only com sequence própria, kind `void_sale`.
+- **Gap 3 — catálogo sem pull** ⏳ PENDENTE (decidido). Não há `PullCustomers`/`PullCylinderTypes` → clientes/preços não descem. **Decisão:** pull de catálogo completo (change-feed customers + cylinder_types + tombstone de delete), emitindo `customer_upsert`/`customer_delete`/`cylinder_upsert`.
 
 ## 4. Estado atual
-- **Serviço no ar:** `https://gas-backend-750551393506.southamerica-east1.run.app` (revisão `gas-backend-00002-qhx`), região `southamerica-east1`, `--allow-unauthenticated`, min=0/max=4, `FIREBASE_PROJECT_ID=gas-manager-499616`.
-- **Verificado:** `listening on :8080`; `/readyz` → 200 (DB OK); `/sync/pull` sem token → 401 (auth OK); rotas desconhecidas → 404 do chi. Suíte inteira verde (`go test ./...`, Docker ligado).
-- **Banco:** Supabase Postgres com 10 tabelas + seed P13. Conexão do Cloud Run = **Session pooler IPv4 grátis porta 5432** (`postgres.aealxmiyotyeoutlqljy@aws-1-sa-east-1.pooler.supabase.com:5432`, `sslmode=require`). **NÃO usar Transaction pooler 6543** (IPv6/add-on pago).
-- **Working tree limpo**, 3 commits novos da sessão em `feat/backend` (ainda não mergeado na main).
-- **O app mobile NÃO fala com o backend ainda** (segue 100% local). Firebase Auth ainda não existe. Logo, multi-dispositivo/nuvem/web ainda NÃO funcionam para o usuário final.
+- Branch `feat/backend`, **8 commits novos** desde `v0.4.0` (`f76bcb9`→`3ffea39`). Tag desta sessão: **v0.5.0**. NÃO mergeado na main.
+- Backend: pull das 4 streams de ledger agora emite contrato limpo, **mas ainda não foi feito redeploy** (combinado: deploy só quando os 3 gaps estiverem prontos).
+- App: camadas firebase/auth/api prontas e testadas; `apply.ts` existe mas é **provisório/bloqueado** (escrito para o contrato pretendido; depende dos eventos que Gap 2/3 vão passar a emitir).
+- Validado: ver §3. `npx tsc --noEmit` nos arquivos novos sem erros novos.
 
-## 5. Próximos passos (ordenados — sub-projeto #3)
-1. **Configurar Firebase Auth** no projeto `gas-manager-499616` (habilitar método de login; o app Firebase ainda não existe).
-2. **Integrar o app Expo ao backend** (sub-projeto #3): fila offline + push/pull contra os endpoints + tela de login Firebase. É a peça que falta para o usuário final.
-3. **Gerar novo APK** (EAS) com a integração.
-4. **Testar fluxo real:** venda no celular A aparecendo no B.
-5. Depois: **FCM** (tempo real), e sub-projetos #4 (painel web) e #1 (página de APKs).
-6. Higiene: rate-limit no `/readyz` (TL sugeriu, opcional), merge `feat/backend`→`main`.
+## 5. Próximos passos (ordem)
+1. **Gap 2 (backend):** migration (tabela/feed append-only de void com `sequence`) + insert no `VoidSale` (mesma tx) + `PullSaleVoids` + campo `Void` no `Cursor` + DTO + wiring no `pull.go` + testes. Kind emitido: `void_sale` com `data={id: <sale_uuid>}`.
+2. **Gap 3 (backend):** migration com `sequence` monotônico (trigger) em `customers`+`cylinder_types` + soft-delete/tombstone em `customers`; `PullCustomers`/`PullCylinderTypes`; campos `Customer`/`Cylinder` no `Cursor`; DTOs; ajustar `DeleteCustomer` (soft-delete) e os GETs de catálogo (filtrar deletados); testes.
+3. **B4 (backend):** `go test ./...` (Docker) + **redeploy** (`gcloud run deploy gas-backend --source backend --region southamerica-east1 --project gas-manager-499616 --quiet`) + verificar `/readyz` 200 e shapes do pull.
+4. **Sessão B (mobile):** schema v3 (`applied_events` p/ dedupe de kinds sem tabela-fato + coluna `cylinder_types.updated_at` p/ LWW) + **reescrever `apply.ts`** no contrato final (remover overload de `sync_outbox`) + Tasks 4.2 (push loop + `store/sync.ts`) / 4.3 (pull loop cursor durável) / 4.4 (orquestração + netinfo).
+5. **Sessão C:** Fase 5 (ligar mutações locais ao outbox) + Fase 6 (login UI + gate + SyncBadge).
+6. **Sessão D:** Fase 7 (APK EAS + teste 2 celulares contra produção).
 
-## 6. Perguntas em aberto
-- **Não liberar o app para o pessoal ainda:** se cada celular acumular dado local antes do sync, vira problema de merge de 3 bancos. (incerto se algum funcionário já usa — usuário disse que não está em produção.)
-- Qual método de login Firebase usar (email/senha? Google?) — decidir no início do #3.
-- `migrate` CLI não funciona com path absoluto no Windows; para migrations futuras no Supabase, usar `psql -d <url> -f arquivo.sql` (e manter `schema_migrations` coerente) ou rodar `migrate` de dentro da pasta de migrations.
+## 6. Perguntas em aberto / itens deferidos
+- `apply.ts` (`a6315c8`) tem 2 smells a resolver na Sessão B: (a) usa `sync_outbox` (fila de saída) como registro de dedupe de `stock_adjustment`/`debt_settlement` e como âncora LWW de `cylinder_upsert` → substituir por `applied_events` + `cylinder_types.updated_at`; (b) realinhar shapes de `void_sale`/catálogo ao DTO final do backend (Gap 2/3).
+- Decisão de mecanismo de cursor monotônico do catálogo (trigger de `sequence` vs `updated_at`+id) — recomendado `sequence` por trigger, mas a decidir na implementação do Gap 3.
+- Trocar as senhas `123456` das 3 contas Firebase antes de distribuir.
+- Higiene: merge `feat/backend`→`main` quando o #3 estiver utilizável.
 
 ## 7. Artefatos relevantes
-- **Serviço:** `https://gas-backend-750551393506.southamerica-east1.run.app` (health externo = `/readyz`).
-- **Commits da sessão:** `26f227a`, `48c8016`, `1516b0d` (branch `feat/backend`).
-- **Código novo:** `backend/cmd/server/main.go` (+`/readyz`, `newRouter` recebe `ready func(ctx) error`), `backend/cmd/server/main_test.go`, `backend/internal/auth/dbloader{,_test}.go`, `backend/internal/auth/testutil_test.go`, `backend/internal/db/migrations/0003_seed_p13.{up,down}.sql`, `backend/internal/db/migrations_test.go`, `backend/internal/db/queries/users.sql` (+`EnsureUser`).
-- **Comandos-chave:**
-  - Migrations Supabase: `psql -d "postgres://postgres.aealxmiyotyeoutlqljy:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require" -v ON_ERROR_STOP=1 -f <arquivo>.up.sql`
-  - Deploy: `gcloud run deploy gas-backend --source "C:/Users/PC/Documents/gas-manager/backend" --region southamerica-east1 --project gas-manager-499616 --quiet`
-  - Logs: `gcloud run services logs read gas-backend --region southamerica-east1 --project gas-manager-499616 --limit 20`
-- **Secrets/credenciais (NÃO versionar):** senha do DB Supabase está no secret `DATABASE_URL` do GCP (e foi compartilhada no chat — usuário pode rotacionar via "Reset password" no Supabase + atualizar o secret se quiser).
+- **Backend novo:** `backend/internal/sync/pull_dto.go` (+ `pull_dto_test.go`, `pull_dto_sample_test.go`), `backend/internal/sync/pull.go` (wiring), `backend/internal/pgconv/pgconv.go` (guard NaN/Inf + teste de UUID).
+- **App novo (Fase 3):** `lib/firebase.ts`, `lib/auth.ts`, `lib/api.ts` (+ `lib/__tests__/api.test.ts`), `lib/sync/apply.ts` (provisório, + `lib/sync/__tests__/apply.test.ts`). `tsconfig.json` ganhou `paths` para `firebase/auth`→RN types.
+- **Comandos-chave:** backend `cd backend; go test ./internal/sync/ ./internal/pgconv/ -count=1` (Docker on); app `npm test` / `npx tsc --noEmit`. Deploy: ver §5 passo 3.
+- **Plano:** `docs/superpowers/plans/2026-06-17-mobile-sync-integration.md`. **Memória:** `project_pull_gaps`, `project_firebase_auth`, `project_backend_design`, `feedback_*`.
 
 ## 8. Instruções pra próxima sessão
-- Rodar `/iniciar`; ler este HANDOFF + a memória `project_backend_design` (decisões de infra fechadas — não re-perguntar).
-- **Backend está pronto e em produção — não re-fazer.** A sessão #3 é sobre o **app mobile** (Expo SDK 54): ler os docs versionados do Expo antes de codar (AGENTS.md).
-- Armadilha: health check externo é `/readyz`, nunca `/healthz` (Google Frontend engole). Banco só conecta pela Session pooler IPv4 (5432).
-- Manter a regra do usuário: testar tudo + revisão TL/QA via subagentes em cada tarefa de código.
-- Melhor primeiro passo do #3: decidir o método de login Firebase e habilitar o Firebase Auth no projeto, depois a tela de login no app.
+- Rodar `/iniciar`; ler este HANDOFF + memória `project_pull_gaps` + o plano.
+- **Não re-investigar os gaps nem re-fazer Fase 3/Gap 1** — estão prontos e verificados. Começar direto no **Gap 2** (backend, TDD), seguindo subagent-driven + revisão TL/QA; commits PT sem menção ao Claude.
+- **Armadilhas:** health externo é `/readyz` (nunca `/healthz`); UUID malformado → 404; Supabase só via Session pooler IPv4 5432; `import type` nos arquivos da camada de dados (import runtime do expo-sqlite quebra o harness Node); migração v2 do app roda dentro de `withTransactionAsync`; no Firebase RN, `getAuth()` NÃO lança se Auth não foi inicializado (usar `initializeAuth` primeiro); testes do backend usam testcontainers (~40s/rodada — paciência); `git` só via PowerShell nesta máquina; `internal/auth` e `internal/db` têm falhas de infra pré-existentes no Docker rootless do Windows (ignorar).
+- **Melhor primeiro passo:** desenhar a migration do feed append-only de void (Gap 2) e a query `PullSaleVoids`, depois ligar no `Cursor` e no `pull.go`.
