@@ -78,4 +78,47 @@ describe("schema migration to v2", () => {
     expect(typeof c?.uuid).toBe("string");
     expect(c?.uuid).toHaveLength(36); // 8-4-4-4-12
   });
+
+  it("backfills distinct, non-null uuids across customers, sales and restocks", async () => {
+    const db = createTestDb();
+    await createBaseTables(db);
+    await db.runAsync(`INSERT INTO cylinder_types (name, weight_kg) VALUES ('P13', 13)`);
+    const N = 50;
+    for (let i = 0; i < N; i++) {
+      await db.runAsync(`INSERT INTO customers (name) VALUES (?)`, [`c${i}`]);
+      await db.runAsync(
+        `INSERT INTO sales (cylinder_type_id, quantity, unit_price, total, payment_method) VALUES (1,1,120,120,'cash')`
+      );
+      await db.runAsync(
+        `INSERT INTO restocks (cylinder_type_id, quantity, cost_per_unit, total_cost) VALUES (1,1,90,90)`
+      );
+    }
+
+    await migrate(db);
+
+    for (const t of ["customers", "sales", "restocks"]) {
+      const r = await db.getFirstAsync<{
+        total: number;
+        distinct_count: number;
+        null_count: number;
+      }>(
+        `SELECT COUNT(*) total, COUNT(DISTINCT uuid) distinct_count,
+                SUM(CASE WHEN uuid IS NULL THEN 1 ELSE 0 END) null_count FROM ${t}`
+      );
+      expect(r).toMatchObject({ total: N, distinct_count: N, null_count: 0 });
+    }
+  });
+
+  it("test adapter's withTransactionAsync rolls back on error (atomicity primitive)", async () => {
+    const db = createTestDb();
+    await db.execAsync(`CREATE TABLE t (x)`);
+    await expect(
+      db.withTransactionAsync(async () => {
+        await db.runAsync(`INSERT INTO t (x) VALUES (1)`);
+        throw new Error("boom");
+      })
+    ).rejects.toThrow("boom");
+    const r = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) c FROM t`);
+    expect(r?.c).toBe(0);
+  });
 });

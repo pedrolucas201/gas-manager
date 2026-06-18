@@ -69,6 +69,28 @@ describe("sync outbox", () => {
     expect(row).toMatchObject({ status: "error", attempts: 1, last_error: "id_conflict" });
   });
 
+  it("pendingCount and oldestPendingAt ignore done and error rows", async () => {
+    const db = await freshDb();
+    await enqueue(db, entry("u1", "2026-06-18T10:00:00Z"));
+    await enqueue(db, entry("u2", "2026-06-18T11:00:00Z"));
+    await enqueue(db, entry("u3", "2026-06-18T12:00:00Z"));
+    await markDone(db, "u1");
+    await markError(db, "u2", "x");
+    expect(await pendingCount(db)).toBe(1);
+    expect(await oldestPendingAt(db)).toBe("2026-06-18T12:00:00Z");
+  });
+
+  it("markError increments attempts cumulatively", async () => {
+    const db = await freshDb();
+    await enqueue(db, entry("u1", "2026-06-18T10:00:00Z"));
+    await markError(db, "u1", "a");
+    await markError(db, "u1", "b");
+    const row = await db.getFirstAsync<{ attempts: number; last_error: string }>(
+      `SELECT attempts, last_error FROM sync_outbox WHERE event_uuid = 'u1'`
+    );
+    expect(row).toMatchObject({ attempts: 2, last_error: "b" });
+  });
+
   it("oldestPendingAt reports the earliest pending timestamp", async () => {
     const db = await freshDb();
     expect(await oldestPendingAt(db)).toBeNull();

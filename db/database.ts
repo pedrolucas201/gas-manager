@@ -1,10 +1,15 @@
+// Keep this a TYPE-only import: a runtime import from "expo-sqlite" would pull
+// the native module, which can't load under the Node (better-sqlite3) test harness.
 import type { SQLiteDatabase } from "expo-sqlite";
 
 export const SCHEMA_VERSION = 2;
 
-// A v4-shaped UUID built entirely in SQLite (randomblob), so backfill works in
-// the app and in Node tests without depending on a JS crypto module. Each
-// randomblob() call is non-deterministic, so every row gets a distinct value.
+// A random UUID-shaped id (8-4-4-4-12) built entirely in SQLite via randomblob,
+// so the SAME backfill SQL runs identically under expo-sqlite (app) and
+// better-sqlite3 (Node tests). Not an RFC-4122 v4 (version/variant nibbles are
+// random), but Postgres `UUID` columns validate only the format, not the
+// version, so the backend accepts it. ~128 random bits → collisions negligible.
+// Each randomblob() call is non-deterministic, so every row gets a distinct id.
 const UUID_EXPR = `lower(
   substr(hex(randomblob(4)),1,8) || '-' ||
   substr(hex(randomblob(2)),1,4) || '-' ||
@@ -92,7 +97,15 @@ export async function migrate(db: SQLiteDatabase) {
   if (current < 2) {
     // v2: client UUIDs per syncable row, catalog updated_at, sale void marker,
     // and the offline sync infrastructure tables.
-    await db.execAsync(`
+    //
+    // Wrapped in a transaction so user_version flips ATOMICALLY with the DDL.
+    // SQLite DDL is transactional, so if the app is killed mid-migration the
+    // whole step rolls back and the next launch re-runs it cleanly. Without
+    // this, a partial run could leave a half-added column and then throw
+    // "duplicate column name" on re-run (ADD COLUMN has no IF NOT EXISTS),
+    // bricking the install on the SQLiteProvider Suspense boundary.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
       ALTER TABLE customers ADD COLUMN uuid TEXT;
       ALTER TABLE customers ADD COLUMN updated_at TEXT;
       ALTER TABLE sales ADD COLUMN uuid TEXT;
@@ -129,6 +142,7 @@ export async function migrate(db: SQLiteDatabase) {
 
       PRAGMA user_version = 2;
     `);
+    });
   }
 }
 
