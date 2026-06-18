@@ -50,6 +50,17 @@ function mockFetch(status: number, body: unknown): jest.Mock {
   return fn;
 }
 
+// Helper: cria um fetch mock cujo json() rejeita (body inválido/vazio)
+function mockFetchBadJson(status: number): jest.Mock {
+  const fn = jest.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.reject(new SyntaxError("Unexpected end of JSON input")),
+  });
+  global.fetch = fn;
+  return fn;
+}
+
 // Helper: cria um fetch mock que rejeita (falha de transporte)
 function mockFetchNetworkError(message = "Failed to fetch"): jest.Mock {
   const fn = jest.fn().mockRejectedValue(new TypeError(message));
@@ -195,23 +206,16 @@ describe("classificação de erros HTTP", () => {
 
   it("500 lança ApiError com status 500", async () => {
     mockFetch(500, { error: "internal_error" });
-    await expect(pullPage("", 10)).rejects.toBeInstanceOf(ApiError);
-    try {
-      await pullPage("", 10);
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError);
-      expect((e as ApiError).status).toBe(500);
-    }
+    const err = await pullPage("", 10).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(500);
   });
 
   it("404 lança ApiError com status 404", async () => {
     mockFetch(404, { error: "not_found" });
-    try {
-      await pullPage("", 10);
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError);
-      expect((e as ApiError).status).toBe(404);
-    }
+    const err = await pullPage("", 10).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
   });
 
   it("falha de transporte (rede) lança NetworkError", async () => {
@@ -227,6 +231,23 @@ describe("classificação de erros HTTP", () => {
   it("401 em pushEvents lança AuthError", async () => {
     mockFetch(401, { error: "unauthorized" });
     await expect(pushEvents([])).rejects.toBeInstanceOf(AuthError);
+  });
+
+  // Fix #2: body JSON inválido/vazio em resposta 2xx deve lançar ApiError (não SyntaxError bruto)
+  it("2xx com JSON inválido lança ApiError (não SyntaxError bruto)", async () => {
+    mockFetchBadJson(200);
+    const err = await pullPage("", 10).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(200);
+  });
+
+  // Fix #3: 409 deve carregar a mensagem do servidor no ApiError
+  it("409 lança ApiError com status 409 e mensagem do servidor", async () => {
+    mockFetch(409, { error: "balance_owed" });
+    const err = await deleteCustomer("cust-uuid").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).message).toBe("balance_owed");
   });
 });
 
@@ -286,13 +307,9 @@ describe("deleteCustomer", () => {
 
   it("409 (balance_owed) lança ApiError com status 409", async () => {
     mockFetch(409, { error: "balance_owed" });
-    try {
-      await deleteCustomer("cust-uuid");
-      fail("deveria ter lançado");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError);
-      expect((e as ApiError).status).toBe(409);
-    }
+    const err = await deleteCustomer("cust-uuid").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
   });
 });
 

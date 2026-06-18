@@ -72,7 +72,7 @@ export interface RestockPayload {
 
 export interface StockAdjPayload {
   cylinder_type_id: string;
-  field: string; // "full" | "empty"
+  field: "full" | "empty";
   delta: number;
   reason: string | null;
 }
@@ -134,7 +134,7 @@ export interface CylinderTypeInput {
 // Helper central: request()
 // ---------------------------------------------------------------------------
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 async function request<T>(
   method: HttpMethod,
@@ -168,10 +168,17 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new AuthError(`HTTP ${response.status}`);
+    // Fix #3: lê o body de erro defensivamente para capturar mensagem do servidor
+    let serverMsg: string | undefined;
+    try {
+      serverMsg = ((await response.json()) as { error?: string }).error;
+    } catch {
+      /* ignora body não-JSON ou vazio */
     }
-    throw new ApiError(response.status);
+    if (response.status === 401 || response.status === 403) {
+      throw new AuthError(serverMsg ?? `HTTP ${response.status}`);
+    }
+    throw new ApiError(response.status, serverMsg ?? `Erro HTTP ${response.status}`);
   }
 
   // 204 No Content — sem body
@@ -179,7 +186,12 @@ async function request<T>(
     return undefined as unknown as T;
   }
 
-  return response.json() as Promise<T>;
+  // Fix #2: parse seguro — body malformado/vazio vira ApiError classificado
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new ApiError(response.status, "Resposta inválida do servidor");
+  }
 }
 
 // ---------------------------------------------------------------------------
