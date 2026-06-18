@@ -76,49 +76,27 @@ func TestNullableUUIDToWire_InvalidIsNil(t *testing.T) {
 func TestNumericToWire_DecimalString_120_50(t *testing.T) {
 	n := numeric("120.50")
 	got := numericToWire(n)
-	// Must be a valid decimal string (not scientific notation, not a JSON object).
-	if got == "" {
-		t.Fatal("want non-empty string")
-	}
-	// Must not contain 'e' or 'E' (no scientific notation) or braces (object).
-	if strings.ContainsAny(got, "eE{}") {
-		t.Fatalf("want plain decimal, got %q", got)
-	}
-	// Must be parseable as a number.
-	var f float64
-	if err := json.Unmarshal([]byte(got), &f); err != nil {
-		t.Fatalf("numericToWire(%q) is not a valid JSON number: %v", got, err)
-	}
-	// 120.50 → f must equal 120.5.
-	if f != 120.5 {
-		t.Fatalf("want 120.5, got %v (string was %q)", f, got)
+	want := "120.50"
+	if got != want {
+		t.Fatalf("numericToWire: want %q, got %q", want, got)
 	}
 }
 
 func TestNumericToWire_DecimalString_90_00(t *testing.T) {
 	n := numeric("90.00")
 	got := numericToWire(n)
-	var f float64
-	if err := json.Unmarshal([]byte(got), &f); err != nil {
-		t.Fatalf("numericToWire(%q) is not a valid JSON number: %v", got, err)
-	}
-	if f != 90.0 {
-		t.Fatalf("want 90.0, got %v (string was %q)", f, got)
+	want := "90.00"
+	if got != want {
+		t.Fatalf("numericToWire: want %q, got %q", want, got)
 	}
 }
 
 func TestNumericToWire_Integer(t *testing.T) {
 	n := numeric("120")
 	got := numericToWire(n)
-	if got == "" {
-		t.Fatal("want non-empty")
-	}
-	var f float64
-	if err := json.Unmarshal([]byte(got), &f); err != nil {
-		t.Fatalf("not a valid JSON number: %v", got)
-	}
-	if f != 120 {
-		t.Fatalf("want 120, got %v", f)
+	want := "120"
+	if got != want {
+		t.Fatalf("numericToWire: want %q, got %q", want, got)
 	}
 }
 
@@ -127,12 +105,9 @@ func TestNumericToWire_FromBigInt(t *testing.T) {
 	// pgx stores "120.50" internally: Int=12050, Exp=-2.
 	n := pgtype.Numeric{Int: big.NewInt(12050), Exp: -2, Valid: true}
 	got := numericToWire(n)
-	var f float64
-	if err := json.Unmarshal([]byte(got), &f); err != nil {
-		t.Fatalf("not a valid JSON number: %v", got)
-	}
-	if f != 120.5 {
-		t.Fatalf("want 120.5, got %v (string was %q)", f, got)
+	want := "120.50"
+	if got != want {
+		t.Fatalf("numericToWire: want %q, got %q", want, got)
 	}
 }
 
@@ -328,6 +303,43 @@ func TestMapDebtSettlementRow_MoneyAsDecimalString(t *testing.T) {
 	}
 }
 
+func TestMapStockAdjRow_FieldDeltaPassThrough(t *testing.T) {
+	row := pullStockAdjRowFixture()
+	dto := mapStockAdjRow(row)
+
+	if dto.Field != "full" {
+		t.Fatalf("field: want %q, got %q", "full", dto.Field)
+	}
+	if dto.Delta != -3 {
+		t.Fatalf("delta: want %d, got %d", -3, dto.Delta)
+	}
+	if dto.Sequence != 7 {
+		t.Fatalf("sequence: want %d, got %d", 7, dto.Sequence)
+	}
+}
+
+func TestMapStockAdjRow_ReasonNilWhenNil(t *testing.T) {
+	row := pullStockAdjRowFixture()
+	row.Reason = nil
+	dto := mapStockAdjRow(row)
+	if dto.Reason != nil {
+		t.Fatalf("want nil reason, got %q", *dto.Reason)
+	}
+}
+
+func TestMapStockAdjRow_ReasonSetWhenNonNil(t *testing.T) {
+	row := pullStockAdjRowFixture()
+	reason := "inventário mensal"
+	row.Reason = &reason
+	dto := mapStockAdjRow(row)
+	if dto.Reason == nil {
+		t.Fatal("want non-nil reason")
+	}
+	if *dto.Reason != reason {
+		t.Fatalf("reason: want %q, got %q", reason, *dto.Reason)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -425,6 +437,18 @@ func pullDebtSettlementRowFixture() gen.PullDebtSettlementsRow {
 		PaymentMethod:    "dinheiro",
 		ServerReceivedAt: pgtype.Timestamptz{Time: fixedTime(), Valid: true},
 		Sequence:         4,
+	}
+}
+
+func pullStockAdjRowFixture() gen.PullStockAdjustmentsRow {
+	return gen.PullStockAdjustmentsRow{
+		ID:               mustUUID("eeeeeeee-0000-0000-0000-000000000001"),
+		CylinderTypeID:   mustUUID("11111111-1111-1111-1111-111111111111"),
+		Field:            "full",
+		Delta:            -3,
+		Reason:           nil,
+		ServerReceivedAt: pgtype.Timestamptz{Time: fixedTime(), Valid: true},
+		Sequence:         7,
 	}
 }
 

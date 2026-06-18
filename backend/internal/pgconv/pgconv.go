@@ -39,6 +39,13 @@ func NumericToString(n pgtype.Numeric) string {
 	if !n.Valid {
 		return "0"
 	}
+	// Guard against NaN and Infinity: these cannot appear in NUMERIC(10,2) money
+	// columns but MarshalJSON is undefined for them (NaN → `"NaN"` including
+	// surrounding quotes, Infinity → "0" via nil Int path). Return "0" defensively
+	// so a single odd row never corrupts the pull response or causes a marshal error.
+	if n.NaN || n.InfinityModifier != 0 {
+		return "0"
+	}
 	b, _ := n.MarshalJSON()
 	return string(b)
 }

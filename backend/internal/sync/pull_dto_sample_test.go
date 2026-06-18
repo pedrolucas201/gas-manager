@@ -11,7 +11,8 @@ import (
 )
 
 // TestSampleSaleEventJSON prints the exact JSON shape emitted for a sale event.
-// This is a documentation test — it always passes but logs the shape.
+// Golden-shape regression test: asserts key fields are present and correctly
+// formatted, and logs the full JSON for human inspection.
 func TestSampleSaleEventJSON(t *testing.T) {
 	srvTime := time.Date(2025, 6, 18, 10, 0, 0, 0, time.UTC)
 	row := gen.PullSalesRow{

@@ -1,12 +1,12 @@
 package sync
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/pedrogomesdev/gas-manager-backend/internal/db/gen"
+	"github.com/pedrogomesdev/gas-manager-backend/internal/pgconv"
 )
 
 // ---------------------------------------------------------------------------
@@ -70,12 +70,11 @@ type DebtSettlementDTO struct {
 // ---------------------------------------------------------------------------
 
 // uuidToWire converts a valid pgtype.UUID to a canonical lowercase
-// 8-4-4-4-12 hyphenated string. Panics on invalid (callers should only pass
-// non-nullable UUIDs that are guaranteed valid by the DB schema).
+// 8-4-4-4-12 hyphenated string. Delegates to pgconv.UUIDToString, the single
+// source of truth for UUID formatting. Callers should only pass non-nullable
+// UUIDs that are guaranteed valid by the DB schema.
 func uuidToWire(u pgtype.UUID) string {
-	b := u.Bytes
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	return pgconv.UUIDToString(u)
 }
 
 // nullableUUIDToWire converts a pgtype.UUID to *string: nil when not valid
@@ -84,25 +83,15 @@ func nullableUUIDToWire(u pgtype.UUID) *string {
 	if !u.Valid {
 		return nil
 	}
-	s := uuidToWire(u)
+	s := pgconv.UUIDToString(u)
 	return &s
 }
 
 // numericToWire converts a pgtype.Numeric to a plain decimal string such as
-// "120.50" or "90". It relies on pgtype.Numeric.MarshalJSON which calls
-// numberTextBytes() internally — that produces an unquoted decimal number
-// (e.g. the bytes 1,2,0,.,5,0) without scientific notation or curly braces.
-// We convert those bytes to a Go string, which is then stored in a string
-// field of the DTO and will be marshalled by encoding/json as a JSON string
-// (i.e. surrounded by quotes in the final output).
+// "120.50" or "90". Delegates to pgconv.NumericToString, the single source
+// of truth for numeric formatting (includes NaN/Infinity guard).
 func numericToWire(n pgtype.Numeric) string {
-	if !n.Valid {
-		return "0"
-	}
-	b, _ := n.MarshalJSON()
-	// MarshalJSON returns "null" for invalid (handled above) and the raw
-	// decimal bytes for valid values (no surrounding quotes).
-	return string(b)
+	return pgconv.NumericToString(n)
 }
 
 // timestamptzToWire formats a valid pgtype.Timestamptz as an RFC3339 string.
