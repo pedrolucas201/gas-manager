@@ -6,6 +6,11 @@
       "@/*": [
         "./*"
       ],
+      // Workaround: tsc 5.x prioriza a chave "types" do exports map sobre customConditions,
+      // resolvendo firebase/auth e @firebase/auth para os tipos browser em vez dos tipos RN.
+      // Apontamos explicitamente para dist/rn/index.rn.d.ts para que getReactNativePersistence
+      // resolva corretamente. Verificado contra @firebase/auth@1.13.3. Em runtime o Metro
+      // usa o campo "react-native" do package.json e o resultado é idêntico.
       "firebase/auth": [
         "./node_modules/@firebase/auth/dist/rn/index.rn.d.ts"
       ],

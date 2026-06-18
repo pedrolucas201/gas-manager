@@ -18,8 +18,28 @@
  * resultado é idêntico.
  */
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from "@firebase/auth";
+import {
+  initializeAuth,
+  getAuth,
+  getReactNativePersistence,
+} from "@firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// Valida as variáveis de ambiente críticas para Auth em tempo de boot.
+// Uma variável ausente causaria falha silenciosa na primeira chamada de login.
+const REQUIRED_ENV: Record<string, string | undefined> = {
+  EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+};
+for (const [key, value] of Object.entries(REQUIRED_ENV)) {
+  if (!value) {
+    throw new Error(
+      `Variável de ambiente obrigatória ausente: ${key}. Adicione-a ao arquivo .env.local.`
+    );
+  }
+}
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY!,
@@ -34,13 +54,24 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 /**
- * Instância de Auth com persistência via AsyncStorage.
+ * Retorna a instância de Auth existente (Fast Refresh) ou cria uma nova com
+ * persistência via AsyncStorage. getAuth() reutiliza a instância já inicializada;
+ * initializeAuth() é chamado apenas no primeiro boot, evitando o erro
+ * auth/already-initialized no hot-reload.
+ */
+function getOrCreateAuth() {
+  try {
+    return getAuth(app);
+  } catch {
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  }
+}
+
+/**
+ * Singleton de Auth com persistência via AsyncStorage.
  * O usuário permanece autenticado entre reinicializações do app (refresh
  * token nunca expira no Firebase email/senha).
- *
- * initializeAuth é idempotente: se já foi chamado com as mesmas opções,
- * retorna a instância existente (comportamento confirmado na fonte do SDK).
  */
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+export const auth = getOrCreateAuth();

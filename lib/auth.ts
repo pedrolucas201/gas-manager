@@ -9,6 +9,8 @@
  *
  * Erros do Firebase são mapeados para mensagens em português.
  */
+// "firebase/auth" re-exporta @firebase/auth; o tsconfig.json aponta ambos para
+// dist/rn/index.rn.d.ts (workaround para tsc 5.x + exports map — ver lib/firebase.ts).
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -54,7 +56,7 @@ export async function signIn(
     return await signInWithEmailAndPassword(auth, email, password);
   } catch (err: unknown) {
     const code = (err as { code?: string }).code ?? "";
-    throw new Error(mapFirebaseError(code));
+    throw new Error(mapFirebaseError(code), { cause: err });
   }
 }
 
