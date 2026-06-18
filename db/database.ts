@@ -1,10 +1,32 @@
-import { SQLiteDatabase } from "expo-sqlite";
+import type { SQLiteDatabase } from "expo-sqlite";
+
+export const SCHEMA_VERSION = 2;
+
+// A v4-shaped UUID built entirely in SQLite (randomblob), so backfill works in
+// the app and in Node tests without depending on a JS crypto module. Each
+// randomblob() call is non-deterministic, so every row gets a distinct value.
+const UUID_EXPR = `lower(
+  substr(hex(randomblob(4)),1,8) || '-' ||
+  substr(hex(randomblob(2)),1,4) || '-' ||
+  substr(hex(randomblob(2)),1,4) || '-' ||
+  substr(hex(randomblob(2)),1,4) || '-' ||
+  substr(hex(randomblob(6)),1,12)
+)`;
 
 export async function initDatabase(db: SQLiteDatabase) {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
+  `);
+  await createBaseTables(db);
+  await migrate(db);
+  await seedDefaultData(db);
+}
 
+// createBaseTables is the original v1 schema. It is idempotent (IF NOT EXISTS)
+// and untouched by later migrations, which add columns/tables on top.
+export async function createBaseTables(db: SQLiteDatabase) {
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS cylinder_types (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -57,8 +79,57 @@ export async function initDatabase(db: SQLiteDatabase) {
       FOREIGN KEY (cylinder_type_id) REFERENCES cylinder_types(id)
     );
   `);
+}
 
-  await seedDefaultData(db);
+// migrate brings the schema up to SCHEMA_VERSION, tracked via PRAGMA
+// user_version. Each step is idempotent and only runs once.
+export async function migrate(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<{ user_version: number }>(
+    "PRAGMA user_version"
+  );
+  const current = row?.user_version ?? 0;
+
+  if (current < 2) {
+    // v2: client UUIDs per syncable row, catalog updated_at, sale void marker,
+    // and the offline sync infrastructure tables.
+    await db.execAsync(`
+      ALTER TABLE customers ADD COLUMN uuid TEXT;
+      ALTER TABLE customers ADD COLUMN updated_at TEXT;
+      ALTER TABLE sales ADD COLUMN uuid TEXT;
+      ALTER TABLE sales ADD COLUMN voided_at TEXT;
+      ALTER TABLE restocks ADD COLUMN uuid TEXT;
+
+      UPDATE customers SET uuid = ${UUID_EXPR} WHERE uuid IS NULL;
+      UPDATE customers SET updated_at = datetime('now') WHERE updated_at IS NULL;
+      UPDATE sales SET uuid = ${UUID_EXPR} WHERE uuid IS NULL;
+      UPDATE restocks SET uuid = ${UUID_EXPR} WHERE uuid IS NULL;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_uuid ON customers(uuid);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_uuid ON sales(uuid);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_restocks_uuid ON restocks(uuid);
+
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_uuid TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        client_created_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        last_error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS sync_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        pull_cursor TEXT NOT NULL DEFAULT '',
+        last_synced_at TEXT
+      );
+      INSERT OR IGNORE INTO sync_state (id, pull_cursor) VALUES (1, '');
+
+      PRAGMA user_version = 2;
+    `);
+  }
 }
 
 async function seedDefaultData(db: SQLiteDatabase) {
