@@ -54,18 +54,23 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 /**
- * Retorna a instância de Auth existente (Fast Refresh) ou cria uma nova com
- * persistência via AsyncStorage. getAuth() reutiliza a instância já inicializada;
- * initializeAuth() é chamado apenas no primeiro boot, evitando o erro
- * auth/already-initialized no hot-reload.
+ * Cria a instância de Auth com persistência via AsyncStorage no primeiro boot,
+ * ou reutiliza a existente no Fast Refresh/hot-reload.
+ *
+ * A ordem importa: initializeAuth() PRIMEIRO. No RN, getAuth() NÃO lança quando
+ * Auth ainda não foi inicializado — ele inicializa com persistência em memória
+ * (default) e apenas emite um aviso. Se chamássemos getAuth() primeiro, o app
+ * ficaria com persistência em memória e o usuário seria deslogado a cada reinício.
+ * Por isso tentamos initializeAuth (que aplica AsyncStorage) e só caímos em
+ * getAuth() quando initializeAuth lança auth/already-initialized no hot-reload.
  */
 function getOrCreateAuth() {
   try {
-    return getAuth(app);
-  } catch {
     return initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
+  } catch {
+    return getAuth(app);
   }
 }
 
