@@ -86,6 +86,7 @@ func newRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(authMW)
 		r.Post("/sync/push", syncSvc.HandlePush)
+		r.Post("/sync/void-sale", syncSvc.HandleVoidSale)
 		r.Get("/sync/pull", syncSvc.HandlePull)
 		r.Get("/sync/errors", syncSvc.HandleSyncErrors)
 		r.Put("/catalog/customers", catalogSvc.HandleUpsertCustomer)

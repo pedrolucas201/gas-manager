@@ -15,6 +15,19 @@ WHERE cylinder_type_id = sqlc.arg(cylinder_type_id);
 -- name: BumpCustomerBalance :exec
 UPDATE customers SET balance = balance + $2 WHERE id = $1;
 
+-- name: VoidSale :one
+UPDATE sales SET voided_at = now(), voided_by = sqlc.arg(voided_by)
+WHERE id = sqlc.arg(id) AND voided_at IS NULL
+RETURNING quantity, is_exchange, payment_method, customer_id, total, cylinder_type_id;
+
+-- name: ReverseInventoryForSale :exec
+UPDATE inventory SET full_qty = full_qty + sqlc.arg(quantity)::int,
+  empty_qty = empty_qty - (CASE WHEN sqlc.arg(is_exchange)::boolean THEN sqlc.arg(quantity)::int ELSE 0 END)
+WHERE cylinder_type_id = sqlc.arg(cylinder_type_id);
+
+-- name: ReverseCustomerBalance :exec
+UPDATE customers SET balance = balance - sqlc.arg(amount) WHERE id = sqlc.arg(id);
+
 -- name: GetRestockByID :one
 SELECT id, payload_hash FROM restocks WHERE id = $1;
 

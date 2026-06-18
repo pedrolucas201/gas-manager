@@ -505,3 +505,68 @@ func (q *Queries) PullStockAdjustments(ctx context.Context, arg PullStockAdjustm
 	}
 	return items, nil
 }
+
+const reverseCustomerBalance = `-- name: ReverseCustomerBalance :exec
+UPDATE customers SET balance = balance - $1 WHERE id = $2
+`
+
+type ReverseCustomerBalanceParams struct {
+	Amount pgtype.Numeric
+	ID     pgtype.UUID
+}
+
+func (q *Queries) ReverseCustomerBalance(ctx context.Context, arg ReverseCustomerBalanceParams) error {
+	_, err := q.db.Exec(ctx, reverseCustomerBalance, arg.Amount, arg.ID)
+	return err
+}
+
+const reverseInventoryForSale = `-- name: ReverseInventoryForSale :exec
+UPDATE inventory SET full_qty = full_qty + $1::int,
+  empty_qty = empty_qty - (CASE WHEN $2::boolean THEN $1::int ELSE 0 END)
+WHERE cylinder_type_id = $3
+`
+
+type ReverseInventoryForSaleParams struct {
+	Quantity       int32
+	IsExchange     bool
+	CylinderTypeID pgtype.UUID
+}
+
+func (q *Queries) ReverseInventoryForSale(ctx context.Context, arg ReverseInventoryForSaleParams) error {
+	_, err := q.db.Exec(ctx, reverseInventoryForSale, arg.Quantity, arg.IsExchange, arg.CylinderTypeID)
+	return err
+}
+
+const voidSale = `-- name: VoidSale :one
+UPDATE sales SET voided_at = now(), voided_by = $1
+WHERE id = $2 AND voided_at IS NULL
+RETURNING quantity, is_exchange, payment_method, customer_id, total, cylinder_type_id
+`
+
+type VoidSaleParams struct {
+	VoidedBy *string
+	ID       pgtype.UUID
+}
+
+type VoidSaleRow struct {
+	Quantity       int32
+	IsExchange     bool
+	PaymentMethod  string
+	CustomerID     pgtype.UUID
+	Total          pgtype.Numeric
+	CylinderTypeID pgtype.UUID
+}
+
+func (q *Queries) VoidSale(ctx context.Context, arg VoidSaleParams) (VoidSaleRow, error) {
+	row := q.db.QueryRow(ctx, voidSale, arg.VoidedBy, arg.ID)
+	var i VoidSaleRow
+	err := row.Scan(
+		&i.Quantity,
+		&i.IsExchange,
+		&i.PaymentMethod,
+		&i.CustomerID,
+		&i.Total,
+		&i.CylinderTypeID,
+	)
+	return i, err
+}
