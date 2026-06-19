@@ -8,6 +8,7 @@ module.exports = {
   testMatch: ["**/__tests__/**/*.test.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
+    "^expo-crypto$": "<rootDir>/__mocks__/expo-crypto.ts",
   },
   transform: {
     "^.+\\.tsx?$": [

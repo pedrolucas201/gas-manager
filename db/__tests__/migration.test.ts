@@ -20,12 +20,27 @@ async function tableExists(db: SQLiteDatabase, name: string): Promise<boolean> {
   return r !== null;
 }
 
-describe("schema migration to v2", () => {
-  it("brings a fresh database to version 2 with uuid columns and sync tables", async () => {
+describe("schema migration to v3", () => {
+  it("brings a fresh database to version 3 with all expected tables and columns", async () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(2);
+    expect(await userVersion(db)).toBe(3);
+
+    // v3 additions
+    expect(await tableExists(db, "applied_events")).toBe(true);
+    expect(await columnNames(db, "cylinder_types")).toEqual(
+      expect.arrayContaining(["updated_at"])
+    );
+  });
+});
+
+describe("schema migration to v2", () => {
+  it("brings a fresh database to version 3 (was 2) with uuid columns and sync tables", async () => {
+    const db = createTestDb();
+    await initDatabase(db);
+
+    expect(await userVersion(db)).toBe(3);
 
     expect(await columnNames(db, "customers")).toEqual(
       expect.arrayContaining(["uuid", "updated_at"])
@@ -58,7 +73,7 @@ describe("schema migration to v2", () => {
     await initDatabase(db);
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(2);
+    expect(await userVersion(db)).toBe(3);
     const count = await db.getFirstAsync<{ c: number }>(
       `SELECT COUNT(*) c FROM sync_state`
     );

@@ -358,44 +358,9 @@ async function applyRestock(db: SQLiteDatabase, d: PulledRestock): Promise<void>
 async function applyStockAdj(db: SQLiteDatabase, d: PulledStockAdj): Promise<void> {
   const cylinderTypeId = await resolveP13LocalId(db);
 
-  // Armazena o ajuste para dedupe — usamos sync_outbox como registro?
-  // Não: stock_adjustments não tem tabela local. Usamos uma tabela auxiliar?
-  // Decisão: os ajustes pullados não têm tabela local equivalente (apenas
-  // restocks e sales têm). Para dedupe, rastreamos pelo uuid na tabela
-  // sync_outbox como evento 'done'? Não adequado.
-  //
-  // Melhor abordagem: criar uma "tabela de ajustes aplicados" seria complexo.
-  // Solução pragmática: guardar o uuid do ajuste em sync_outbox com status
-  // 'done' para marcar como visto. Mas sync_outbox é para eventos de saída.
-  //
-  // Decisão final: para stock_adjustment pullado, usamos o campo
-  // sync_state como âncora do cursor — um ajuste só chega uma vez por pull
-  // (o cursor avança). Se o pull for retomado, o cursor já passou por ele.
-  // O risco de duplicata existe apenas se o mesmo ajuste aparecer em duas
-  // páginas diferentes, o que não ocorre pelo design do cursor.
-  //
-  // Para ter dedupe explícito (igual aos outros kinds), registramos o uuid
-  // em uma entrada 'done' na sync_outbox. Isso é um overload da tabela
-  // mas evita criar uma nova. Alternativa: aceitar que o cursor garante
-  // aplicação única (sem dedupe adicional).
-  //
-  // Escolha final: sem tabela de fatos local para stock_adjustments,
-  // usamos apenas o cursor como garantia de aplicação única. Documentado.
-  // (O cursor no pull_loop avança só após commit local — Task 4.3.)
-  //
-  // Para consistência com os outros kinds e para cobrir o caso de cursor
-  // replay manual, registramos o ajuste aplicado na sync_outbox como
-  // evento 'done'. Isso usa a tabela existente sem criar nova infra.
-  //
-  // Na prática, o único risco de double-apply é se alguém chamar applyEvent
-  // diretamente duas vezes com o mesmo evento (ex: bugs no engine).
-  // Os testes cobrem esse caso.
-
-  // Tenta registrar como evento visto (dedupe via sync_outbox).
+  // Dedupe via applied_events (tabela de fatos visitados do pull stream).
   const dedup = await db.runAsync(
-    `INSERT OR IGNORE INTO sync_outbox
-       (event_uuid, kind, payload, client_created_at, status)
-     VALUES (?, 'stock_adjustment', '{}', datetime('now'), 'done')`,
+    `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
     [d.id]
   );
 
@@ -420,11 +385,9 @@ async function applyStockAdj(db: SQLiteDatabase, d: PulledStockAdj): Promise<voi
 }
 
 async function applySettlement(db: SQLiteDatabase, d: PulledSettlement): Promise<void> {
-  // Dedupe via sync_outbox (mesmo padrão de stock_adjustment).
+  // Dedupe via applied_events.
   const dedup = await db.runAsync(
-    `INSERT OR IGNORE INTO sync_outbox
-       (event_uuid, kind, payload, client_created_at, status)
-     VALUES (?, 'debt_settlement', '{}', datetime('now'), 'done')`,
+    `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
     [d.id]
   );
 
@@ -486,44 +449,13 @@ async function applyCylinderUpsert(
   const salePrice = parseFloat(d.sale_price);
   const costPrice = parseFloat(d.cost_price);
 
-  // LWW: só atualiza se updated_at do evento é mais recente que o local.
-  // cylinder_types não tem coluna updated_at no schema v1/v2 local — usamos
-  // UPDATE incondicional após comparar. Para suportar LWW, precisamos de
-  // updated_at no local. Como a tabela não tem essa coluna, adicionamos
-  // a comparação via um registro auxiliar ou simplesmente atualizamos sempre
-  // (last-write-wins por chegada).
-  //
-  // Decisão: cylinder_types local não tem updated_at no schema v2.
-  // Para implementar LWW sem alterar o schema (fora do escopo desta task),
-  // armazenamos o updated_at do último cylinder_upsert aplicado na
-  // sync_state ou num registro da sync_outbox.
-  //
-  // Solução pragmática: usamos a sync_outbox com event_uuid = 'cylinder_lww'
-  // + client_created_at para rastrear o último updated_at aplicado.
-  // Se o novo updated_at é mais antigo, ignoramos.
-
-  const lwwKey = `cylinder_lww_${d.id}`;
-  const prev = await db.getFirstAsync<{ client_created_at: string }>(
-    `SELECT client_created_at FROM sync_outbox WHERE event_uuid = ?`,
-    [lwwKey]
-  );
-
-  if (prev && prev.client_created_at >= d.updated_at) {
-    // Versão mais antiga ou igual — ignora (LWW).
-    return;
-  }
-
-  // Atualiza os preços do P13 local.
+  // LWW via cylinder_types.updated_at (coluna adicionada na v3).
+  // Comparação lexicográfica de strings ISO8601 = comparação cronológica.
+  // updated_at='' (valor inicial) perde sempre para qualquer timestamp real.
   await db.runAsync(
-    `UPDATE cylinder_types SET sale_price = ?, cost_price = ? WHERE name = 'P13'`,
-    [salePrice, costPrice]
-  );
-
-  // Persiste o updated_at como âncora LWW.
-  await db.runAsync(
-    `INSERT INTO sync_outbox (event_uuid, kind, payload, client_created_at, status)
-     VALUES (?, 'cylinder_upsert', '{}', ?, 'done')
-     ON CONFLICT(event_uuid) DO UPDATE SET client_created_at = excluded.client_created_at`,
-    [lwwKey, d.updated_at]
+    `UPDATE cylinder_types
+     SET sale_price = ?, cost_price = ?, updated_at = ?
+     WHERE name = 'P13' AND ? > updated_at`,
+    [salePrice, costPrice, d.updated_at, d.updated_at]
   );
 }

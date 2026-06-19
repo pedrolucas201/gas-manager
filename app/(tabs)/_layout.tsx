@@ -1,11 +1,26 @@
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SyncBadge } from "@/components/SyncBadge";
+import { signOutUser } from "@/lib/auth";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
-function TabIcon({ name, color, size }: { name: IoniconsName; color: string | any; size: number }) {
+function TabIcon({
+  name,
+  color,
+  size,
+}: {
+  name: IoniconsName;
+  color: string | unknown;
+  size: number;
+}) {
   return <Ionicons name={name} size={size} color={color as string} />;
+}
+
+async function handleLogout() {
+  await signOutUser();
+  router.replace("/login");
 }
 
 export default function TabLayout() {
@@ -26,6 +41,7 @@ export default function TabLayout() {
         headerStyle: { backgroundColor: "#f97316" },
         headerTintColor: "#ffffff",
         headerTitleStyle: { fontWeight: "700" },
+        headerRight: () => <SyncBadge onLogout={handleLogout} />,
       }}
     >
       <Tabs.Screen

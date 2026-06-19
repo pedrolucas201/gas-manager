@@ -1,17 +1,17 @@
 import { SQLiteDatabase } from "expo-sqlite";
+import { randomUUID } from "expo-crypto";
+import { enqueue } from "@/lib/sync/outbox";
 import { Customer } from "@/types";
 
 export async function getCustomers(db: SQLiteDatabase): Promise<Customer[]> {
-  return await db.getAllAsync<Customer>(
-    `SELECT * FROM customers ORDER BY name ASC`
-  );
+  return db.getAllAsync<Customer>(`SELECT * FROM customers ORDER BY name ASC`);
 }
 
 export async function getCustomerById(
   db: SQLiteDatabase,
   id: number
 ): Promise<Customer | null> {
-  return await db.getFirstAsync<Customer>(
+  return db.getFirstAsync<Customer>(
     `SELECT * FROM customers WHERE id = ?`,
     [id]
   );
@@ -21,11 +21,33 @@ export async function addCustomer(
   db: SQLiteDatabase,
   data: { name: string; phone?: string; address?: string }
 ): Promise<number> {
-  const result = await db.runAsync(
-    `INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)`,
-    [data.name, data.phone ?? null, data.address ?? null]
-  );
-  return result.lastInsertRowId;
+  const uuid = randomUUID();
+  const now = new Date().toISOString();
+  let localId = 0;
+
+  await db.withTransactionAsync(async () => {
+    const r = await db.runAsync(
+      `INSERT INTO customers (name, phone, address, uuid, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      [data.name, data.phone ?? null, data.address ?? null, uuid, now]
+    );
+    localId = r.lastInsertRowId;
+
+    await enqueue(db, {
+      event_uuid: randomUUID(),
+      kind: "customer_upsert",
+      payload: JSON.stringify({
+        id: uuid,
+        name: data.name,
+        phone: data.phone ?? null,
+        address: data.address ?? null,
+        credit_limit: null,
+        updated_at: now,
+      }),
+      client_created_at: now,
+    });
+  });
+
+  return localId;
 }
 
 export async function updateCustomer(
@@ -33,14 +55,37 @@ export async function updateCustomer(
   id: number,
   data: { name: string; phone?: string; address?: string }
 ) {
-  await db.runAsync(
-    `UPDATE customers SET name = ?, phone = ?, address = ? WHERE id = ?`,
-    [data.name, data.phone ?? null, data.address ?? null, id]
-  );
+  const now = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE customers SET name = ?, phone = ?, address = ?, updated_at = ? WHERE id = ?`,
+      [data.name, data.phone ?? null, data.address ?? null, now, id]
+    );
+
+    const r = await db.getFirstAsync<{ uuid: string }>(
+      `SELECT uuid FROM customers WHERE id = ?`,
+      [id]
+    );
+
+    await enqueue(db, {
+      event_uuid: randomUUID(),
+      kind: "customer_upsert",
+      payload: JSON.stringify({
+        id: r!.uuid,
+        name: data.name,
+        phone: data.phone ?? null,
+        address: data.address ?? null,
+        credit_limit: null,
+        updated_at: now,
+      }),
+      client_created_at: now,
+    });
+  });
 }
 
 export async function deleteCustomer(db: SQLiteDatabase, id: number) {
-  const customer = await db.getFirstAsync<Customer>(
+  const customer = await db.getFirstAsync<Customer & { uuid: string }>(
     `SELECT * FROM customers WHERE id = ?`,
     [id]
   );
@@ -52,34 +97,77 @@ export async function deleteCustomer(db: SQLiteDatabase, id: number) {
     );
   }
 
-  // Preserve sales history, just unlink it from the deleted customer
-  await db.runAsync(`UPDATE sales SET customer_id = NULL WHERE customer_id = ?`, [id]);
-  await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
+  const now = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE sales SET customer_id = NULL WHERE customer_id = ?`,
+      [id]
+    );
+    await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
+
+    await enqueue(db, {
+      event_uuid: randomUUID(),
+      kind: "customer_delete",
+      payload: JSON.stringify({ id: customer.uuid }),
+      client_created_at: now,
+    });
+  });
 }
 
 export async function settleCustomerDebt(
   db: SQLiteDatabase,
   id: number,
-  amount: number
+  amount: number,
+  paymentMethod = "pix"
 ) {
-  await db.runAsync(
-    `UPDATE customers SET balance = balance + ? WHERE id = ?`,
-    [amount, id]
-  );
+  const now = new Date().toISOString();
+  const uuid = randomUUID();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE customers SET balance = balance + ? WHERE id = ?`,
+      [amount, id]
+    );
+
+    const r = await db.getFirstAsync<{ uuid: string }>(
+      `SELECT uuid FROM customers WHERE id = ?`,
+      [id]
+    );
+
+    await enqueue(db, {
+      event_uuid: uuid,
+      kind: "debt_settlement",
+      payload: JSON.stringify({
+        kind: "debt_settlement",
+        id: uuid,
+        client_created_at: now,
+        debt_settlement: {
+          customer_id: r!.uuid,
+          amount: amount.toFixed(2),
+          payment_method: paymentMethod,
+        },
+      }),
+      client_created_at: now,
+    });
+  });
 }
 
 export async function getDebtors(db: SQLiteDatabase): Promise<Customer[]> {
-  return await db.getAllAsync<Customer>(
+  return db.getAllAsync<Customer>(
     `SELECT * FROM customers WHERE balance < 0 ORDER BY balance ASC`
   );
 }
 
-export async function getCustomerSales(db: SQLiteDatabase, customer_id: number) {
-  return await db.getAllAsync(
+export async function getCustomerSales(
+  db: SQLiteDatabase,
+  customer_id: number
+) {
+  return db.getAllAsync(
     `SELECT s.*, ct.name as cylinder_name
      FROM sales s
      JOIN cylinder_types ct ON s.cylinder_type_id = ct.id
-     WHERE s.customer_id = ?
+     WHERE s.customer_id = ? AND s.voided_at IS NULL
      ORDER BY s.created_at DESC`,
     [customer_id]
   );

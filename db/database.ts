@@ -2,7 +2,7 @@
 // the native module, which can't load under the Node (better-sqlite3) test harness.
 import type { SQLiteDatabase } from "expo-sqlite";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // A random UUID-shaped id (8-4-4-4-12) built entirely in SQLite via randomblob,
 // so the SAME backfill SQL runs identically under expo-sqlite (app) and
@@ -99,11 +99,6 @@ export async function migrate(db: SQLiteDatabase) {
     // and the offline sync infrastructure tables.
     //
     // Wrapped in a transaction so user_version flips ATOMICALLY with the DDL.
-    // SQLite DDL is transactional, so if the app is killed mid-migration the
-    // whole step rolls back and the next launch re-runs it cleanly. Without
-    // this, a partial run could leave a half-added column and then throw
-    // "duplicate column name" on re-run (ADD COLUMN has no IF NOT EXISTS),
-    // bricking the install on the SQLiteProvider Suspense boundary.
     await db.withTransactionAsync(async () => {
       await db.execAsync(`
       ALTER TABLE customers ADD COLUMN uuid TEXT;
@@ -142,6 +137,23 @@ export async function migrate(db: SQLiteDatabase) {
 
       PRAGMA user_version = 2;
     `);
+    });
+  }
+
+  if (current < 3) {
+    // v3: applied_events table for dedupe of pulled events that have no local
+    // fact table (stock_adjustment, debt_settlement); cylinder_types.updated_at
+    // for LWW tracking of cylinder price upserts from the pull stream.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE cylinder_types ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+
+        CREATE TABLE IF NOT EXISTS applied_events (
+          event_uuid TEXT NOT NULL PRIMARY KEY
+        );
+
+        PRAGMA user_version = 3;
+      `);
     });
   }
 }
