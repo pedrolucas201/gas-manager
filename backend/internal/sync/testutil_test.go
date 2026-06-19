@@ -55,6 +55,7 @@ func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 		"0001_init.up.sql",
 		"0002_sync_errors.up.sql",
 		"0004_sale_voids.up.sql",
+		"0005_catalog_events.up.sql",
 	} {
 		path := filepath.Join("..", "db", "migrations", name)
 		sql := readFile(t, path)
