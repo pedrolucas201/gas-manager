@@ -20,6 +20,7 @@ type Cursor struct {
 	Restock int64 `json:"restock"`
 	Adjust  int64 `json:"adjust"`
 	Settle  int64 `json:"settle"`
+	Void    int64 `json:"void"`
 }
 
 type Event struct {
@@ -90,6 +91,17 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		events = append(events, Event{Kind: "debt_settlement", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapDebtSettlementRow(r)})
 	}
 
+	voids, err := q.PullSaleVoids(ctx, gen.PullSaleVoidsParams{ID: c.Void, Limit: limit})
+	if err != nil {
+		return PullPage{}, err
+	}
+	if int32(len(voids)) == limit {
+		anyFull = true
+	}
+	for _, r := range voids {
+		events = append(events, Event{Kind: "void_sale", Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapVoidRow(r)})
+	}
+
 	sort.SliceStable(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 
 	hasMore := anyFull || int32(len(events)) > limit
@@ -116,6 +128,10 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		case "debt_settlement":
 			if e.Sequence > next.Settle {
 				next.Settle = e.Sequence
+			}
+		case "void_sale":
+			if e.Sequence > next.Void {
+				next.Void = e.Sequence
 			}
 		}
 	}

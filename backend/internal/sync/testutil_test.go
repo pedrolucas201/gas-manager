@@ -51,7 +51,11 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
-	for _, name := range []string{"0001_init.up.sql", "0002_sync_errors.up.sql"} {
+	for _, name := range []string{
+		"0001_init.up.sql",
+		"0002_sync_errors.up.sql",
+		"0004_sale_voids.up.sql",
+	} {
 		path := filepath.Join("..", "db", "migrations", name)
 		sql := readFile(t, path)
 		if _, err := pool.Exec(ctx, sql); err != nil {

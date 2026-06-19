@@ -81,3 +81,14 @@ FROM stock_adjustments WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 -- name: PullDebtSettlements :many
 SELECT id, customer_id, amount, payment_method, server_received_at, sequence
 FROM debt_settlements WHERE sequence > $1 ORDER BY sequence LIMIT $2;
+
+-- name: InsertSaleVoid :one
+INSERT INTO sale_voids (sale_id, voided_by) VALUES ($1, $2)
+RETURNING id, server_received_at;
+
+-- name: PullSaleVoids :many
+SELECT id, sale_id, server_received_at
+FROM sale_voids
+WHERE id > $1
+ORDER BY id
+LIMIT $2;

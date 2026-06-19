@@ -61,6 +61,14 @@ func (s *Service) VoidSale(ctx context.Context, userID, saleID string) error {
 		}
 	}
 
+	// Append to the pull stream so other devices see the cancellation.
+	if _, err := q.InsertSaleVoid(ctx, gen.InsertSaleVoidParams{
+		SaleID:   id,
+		VoidedBy: userID,
+	}); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
 }
 

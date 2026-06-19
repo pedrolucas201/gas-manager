@@ -165,3 +165,13 @@ func mapDebtSettlementRow(r gen.PullDebtSettlementsRow) DebtSettlementDTO {
 		Sequence:         r.Sequence,
 	}
 }
+
+// VoidSaleDTO is the data payload for a void_sale pull event.
+// ID is the UUID of the sale that was cancelled (not the sale_voids row id).
+type VoidSaleDTO struct {
+	ID string `json:"id"`
+}
+
+func mapVoidRow(r gen.PullSaleVoidsRow) VoidSaleDTO {
+	return VoidSaleDTO{ID: uuidToWire(r.SaleID)}
+}

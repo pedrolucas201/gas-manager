@@ -263,6 +263,28 @@ func (q *Queries) InsertSale(ctx context.Context, arg InsertSaleParams) (InsertS
 	return i, err
 }
 
+const insertSaleVoid = `-- name: InsertSaleVoid :one
+INSERT INTO sale_voids (sale_id, voided_by) VALUES ($1, $2)
+RETURNING id, server_received_at
+`
+
+type InsertSaleVoidParams struct {
+	SaleID   pgtype.UUID
+	VoidedBy string
+}
+
+type InsertSaleVoidRow struct {
+	ID               int64
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertSaleVoid(ctx context.Context, arg InsertSaleVoidParams) (InsertSaleVoidRow, error) {
+	row := q.db.QueryRow(ctx, insertSaleVoid, arg.SaleID, arg.VoidedBy)
+	var i InsertSaleVoidRow
+	err := row.Scan(&i.ID, &i.ServerReceivedAt)
+	return i, err
+}
+
 const insertStockAdjustment = `-- name: InsertStockAdjustment :one
 INSERT INTO stock_adjustments (id, cylinder_type_id, field, delta, reason,
   payload_hash, created_by, client_created_at)
@@ -389,6 +411,45 @@ func (q *Queries) PullRestocks(ctx context.Context, arg PullRestocksParams) ([]P
 			&i.ServerReceivedAt,
 			&i.Sequence,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pullSaleVoids = `-- name: PullSaleVoids :many
+SELECT id, sale_id, server_received_at
+FROM sale_voids
+WHERE id > $1
+ORDER BY id
+LIMIT $2
+`
+
+type PullSaleVoidsParams struct {
+	ID    int64
+	Limit int32
+}
+
+type PullSaleVoidsRow struct {
+	ID               int64
+	SaleID           pgtype.UUID
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) PullSaleVoids(ctx context.Context, arg PullSaleVoidsParams) ([]PullSaleVoidsRow, error) {
+	rows, err := q.db.Query(ctx, pullSaleVoids, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PullSaleVoidsRow
+	for rows.Next() {
+		var i PullSaleVoidsRow
+		if err := rows.Scan(&i.ID, &i.SaleID, &i.ServerReceivedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

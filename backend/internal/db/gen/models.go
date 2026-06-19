@@ -81,6 +81,13 @@ type Sale struct {
 	VoidedBy         *string
 }
 
+type SaleVoid struct {
+	ID               int64
+	SaleID           pgtype.UUID
+	VoidedBy         string
+	ServerReceivedAt pgtype.Timestamptz
+}
+
 type StockAdjustment struct {
 	ID               pgtype.UUID
 	CylinderTypeID   pgtype.UUID
