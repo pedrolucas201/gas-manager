@@ -8,7 +8,16 @@
       "android": {
         "buildType": "apk"
       },
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBpQYIySNYYcBCtWIY9M6_yoEPkgSZsjgI",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "gas-manager-499616.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "gas-manager-499616",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "gas-manager-499616.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "750551393506",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:750551393506:web:137187b3e642f375186abb",
+        "EXPO_PUBLIC_API_BASE_URL": "https://gas-backend-750551393506.southamerica-east1.run.app"
+      }
     },
     "production": {
       "android": {
