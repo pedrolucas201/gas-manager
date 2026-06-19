@@ -3,7 +3,7 @@ import { useSQLiteContext } from "expo-sqlite";
 import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getSales, deleteSale } from "@/db/queries/sales";
+import { getSales, voidSale } from "@/db/queries/sales";
 import { Sale, PaymentMethod } from "@/types";
 import { useAppStore } from "@/store";
 
@@ -94,7 +94,7 @@ export default function SalesScreen() {
           text: "Cancelar venda",
           style: "destructive",
           onPress: async () => {
-            await deleteSale(db, id);
+            await voidSale(db, id);
             bumpSales();
             bumpInventory();
             bumpCustomers();
