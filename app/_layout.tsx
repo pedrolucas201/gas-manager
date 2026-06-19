@@ -17,7 +17,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (user === null) {
         engineRef.current?.stop();
         engineRef.current = null;
-        router.replace("/login");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        router.replace("/login" as any);
       } else {
         if (!engineRef.current) {
           const engine = new SyncEngine(db);

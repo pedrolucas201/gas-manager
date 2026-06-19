@@ -20,7 +20,8 @@ function TabIcon({
 
 async function handleLogout() {
   await signOutUser();
-  router.replace("/login");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  router.replace("/login" as any);
 }
 
 export default function TabLayout() {
