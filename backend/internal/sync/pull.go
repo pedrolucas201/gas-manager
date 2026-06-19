@@ -21,6 +21,7 @@ type Cursor struct {
 	Adjust  int64 `json:"adjust"`
 	Settle  int64 `json:"settle"`
 	Void    int64 `json:"void"`
+	Catalog int64 `json:"catalog"`
 }
 
 type Event struct {
@@ -102,6 +103,21 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		events = append(events, Event{Kind: "void_sale", Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapVoidRow(r)})
 	}
 
+	catalogEvts, err := q.PullCatalogEvents(ctx, gen.PullCatalogEventsParams{ID: c.Catalog, Limit: limit})
+	if err != nil {
+		return PullPage{}, err
+	}
+	if int32(len(catalogEvts)) == limit {
+		anyFull = true
+	}
+	for _, r := range catalogEvts {
+		var rawData json.RawMessage
+		if jsonErr := json.Unmarshal([]byte(r.Data), &rawData); jsonErr != nil {
+			rawData = json.RawMessage(`{}`)
+		}
+		events = append(events, Event{Kind: r.Kind, Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: rawData})
+	}
+
 	sort.SliceStable(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 
 	hasMore := anyFull || int32(len(events)) > limit
@@ -132,6 +148,10 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		case "void_sale":
 			if e.Sequence > next.Void {
 				next.Void = e.Sequence
+			}
+		case "customer_upsert", "customer_delete", "cylinder_upsert":
+			if e.Sequence > next.Catalog {
+				next.Catalog = e.Sequence
 			}
 		}
 	}

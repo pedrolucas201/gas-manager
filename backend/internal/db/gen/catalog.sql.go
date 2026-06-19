@@ -23,6 +23,74 @@ func (q *Queries) DeleteCustomerIfNoBalance(ctx context.Context, id pgtype.UUID)
 	return result.RowsAffected(), nil
 }
 
+const insertCatalogEvent = `-- name: InsertCatalogEvent :one
+INSERT INTO catalog_events (kind, ref_id, data) VALUES ($1, $2, $3)
+RETURNING id, server_received_at
+`
+
+type InsertCatalogEventParams struct {
+	Kind  string
+	RefID pgtype.UUID
+	Data  string
+}
+
+type InsertCatalogEventRow struct {
+	ID               int64
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertCatalogEvent(ctx context.Context, arg InsertCatalogEventParams) (InsertCatalogEventRow, error) {
+	row := q.db.QueryRow(ctx, insertCatalogEvent, arg.Kind, arg.RefID, arg.Data)
+	var i InsertCatalogEventRow
+	err := row.Scan(&i.ID, &i.ServerReceivedAt)
+	return i, err
+}
+
+const pullCatalogEvents = `-- name: PullCatalogEvents :many
+SELECT id, kind, data, server_received_at
+FROM catalog_events
+WHERE id > $1
+ORDER BY id
+LIMIT $2
+`
+
+type PullCatalogEventsParams struct {
+	ID    int64
+	Limit int32
+}
+
+type PullCatalogEventsRow struct {
+	ID               int64
+	Kind             string
+	Data             string
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) PullCatalogEvents(ctx context.Context, arg PullCatalogEventsParams) ([]PullCatalogEventsRow, error) {
+	rows, err := q.db.Query(ctx, pullCatalogEvents, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PullCatalogEventsRow
+	for rows.Next() {
+		var i PullCatalogEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Data,
+			&i.ServerReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unlinkCustomerSales = `-- name: UnlinkCustomerSales :exec
 UPDATE sales SET customer_id = NULL WHERE customer_id = $1
 `

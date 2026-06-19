@@ -52,13 +52,19 @@ func newCatalogTestDB(t *testing.T) *pgxpool.Pool {
 
 func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	path := filepath.Join("..", "db", "migrations", "0001_init.up.sql")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), string(b)); err != nil {
-		t.Fatalf("migrate: %v", err)
+	ctx := context.Background()
+	for _, name := range []string{
+		"0001_init.up.sql",
+		"0005_catalog_events.up.sql",
+	} {
+		path := filepath.Join("..", "db", "migrations", name)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", name, err)
+		}
+		if _, err := pool.Exec(ctx, string(b)); err != nil {
+			t.Fatalf("migrate %s: %v", name, err)
+		}
 	}
 }
 

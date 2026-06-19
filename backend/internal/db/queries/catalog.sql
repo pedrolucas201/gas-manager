@@ -15,3 +15,14 @@ UPDATE sales SET customer_id = NULL WHERE customer_id = $1;
 -- name: UpdateCylinderType :exec
 UPDATE cylinder_types SET sale_price=$2, cost_price=$3, active=$4, updated_at=$5
 WHERE id=$1 AND updated_at < $5;
+
+-- name: InsertCatalogEvent :one
+INSERT INTO catalog_events (kind, ref_id, data) VALUES ($1, $2, $3)
+RETURNING id, server_received_at;
+
+-- name: PullCatalogEvents :many
+SELECT id, kind, data, server_received_at
+FROM catalog_events
+WHERE id > $1
+ORDER BY id
+LIMIT $2;

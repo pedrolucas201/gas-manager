@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CatalogEvent struct {
+	ID               int64
+	Kind             string
+	RefID            pgtype.UUID
+	Data             string
+	ServerReceivedAt pgtype.Timestamptz
+}
+
 type Customer struct {
 	ID          pgtype.UUID
 	Name        string

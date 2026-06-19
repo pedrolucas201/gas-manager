@@ -31,9 +31,8 @@ type CustomerInput struct {
 
 var ErrBalanceOwed = errors.New("customer has outstanding balance")
 
-// DeleteCustomer unlinks the customer's sales and deletes the row only if the
-// balance is zero. Both run in one transaction: a blocked delete (balance != 0)
-// rolls back, leaving the sales still linked.
+// DeleteCustomer unlinks the customer's sales, deletes the row only if the
+// balance is zero, and appends a customer_delete catalog event — all in one tx.
 func (s *Service) DeleteCustomer(ctx context.Context, id string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -51,25 +50,53 @@ func (s *Service) DeleteCustomer(ctx context.Context, id string) error {
 	if rows == 0 {
 		return ErrBalanceOwed
 	}
+	data, _ := json.Marshal(map[string]any{"id": id})
+	if _, err := q.InsertCatalogEvent(ctx, gen.InsertCatalogEventParams{
+		Kind: "customer_delete", RefID: pgconv.MustUUID(id), Data: string(data),
+	}); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
-// UpsertCustomer applies a last-write-wins catalog write: the underlying query
-// only overwrites when the incoming UpdatedAt is newer.
+// UpsertCustomer applies a last-write-wins catalog write and appends a
+// customer_upsert catalog event — both in one transaction.
 func (s *Service) UpsertCustomer(ctx context.Context, in CustomerInput) error {
-	q := gen.New(s.pool)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	q := gen.New(tx)
+
 	var creditLimit pgtype.Numeric
 	if in.CreditLimit != nil {
 		creditLimit = pgconv.Numeric(*in.CreditLimit)
 	}
-	return q.UpsertCustomer(ctx, gen.UpsertCustomerParams{
+	if err := q.UpsertCustomer(ctx, gen.UpsertCustomerParams{
 		ID:          pgconv.MustUUID(in.ID),
 		Name:        in.Name,
 		Phone:       in.Phone,
 		Address:     in.Address,
 		CreditLimit: creditLimit,
 		UpdatedAt:   pgconv.Timestamptz(in.UpdatedAt),
+	}); err != nil {
+		return err
+	}
+
+	data, _ := json.Marshal(map[string]any{
+		"id":         in.ID,
+		"name":       in.Name,
+		"phone":      in.Phone,
+		"address":    in.Address,
+		"updated_at": in.UpdatedAt.UTC().Format(time.RFC3339),
 	})
+	if _, err := q.InsertCatalogEvent(ctx, gen.InsertCatalogEventParams{
+		Kind: "customer_upsert", RefID: pgconv.MustUUID(in.ID), Data: string(data),
+	}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // HandleUpsertCustomer serves PUT /customers.
@@ -93,18 +120,38 @@ type CylinderTypeInput struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// UpdateCylinderType applies a last-write-wins price/cost/active edit to a
-// cylinder type. The underlying query only overwrites when the incoming
-// UpdatedAt is newer. The row is expected to already exist (seeded P13).
+// UpdateCylinderType applies a last-write-wins price/cost/active edit and
+// appends a cylinder_upsert catalog event — both in one transaction.
 func (s *Service) UpdateCylinderType(ctx context.Context, id string, in CylinderTypeInput) error {
-	q := gen.New(s.pool)
-	return q.UpdateCylinderType(ctx, gen.UpdateCylinderTypeParams{
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	q := gen.New(tx)
+
+	if err := q.UpdateCylinderType(ctx, gen.UpdateCylinderTypeParams{
 		ID:        pgconv.MustUUID(id),
 		SalePrice: pgconv.Numeric(in.SalePrice),
 		CostPrice: pgconv.Numeric(in.CostPrice),
 		Active:    in.Active,
 		UpdatedAt: pgconv.Timestamptz(in.UpdatedAt),
+	}); err != nil {
+		return err
+	}
+
+	data, _ := json.Marshal(map[string]any{
+		"id":         id,
+		"sale_price": in.SalePrice,
+		"cost_price": in.CostPrice,
+		"updated_at": in.UpdatedAt.UTC().Format(time.RFC3339),
 	})
+	if _, err := q.InsertCatalogEvent(ctx, gen.InsertCatalogEventParams{
+		Kind: "cylinder_upsert", RefID: pgconv.MustUUID(id), Data: string(data),
+	}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // HandleUpdateCylinderType serves PUT /catalog/cylinder-types/{id}.
