@@ -109,7 +109,7 @@ export interface PullEvent {
 }
 
 export interface PullPageResponse {
-  events: PullEvent[];
+  events: PullEvent[] | null; // Go serializes nil slice as null
   next_cursor: string;
   has_more: boolean;
 }

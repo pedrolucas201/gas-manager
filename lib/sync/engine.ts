@@ -130,8 +130,9 @@ export class SyncEngine {
       // Garante que a venda existe localmente antes de tentar anulá-la
       // no mesmo page — evita forward-reference quando void.id < sale.sequence
       // (BIGSERIALs independentes entre tabelas).
-      const facts = page.events.filter((e) => FACT_KINDS.has(e.kind));
-      const rest = page.events.filter((e) => !FACT_KINDS.has(e.kind));
+      const pageEvents = page.events ?? [];
+      const facts = pageEvents.filter((e) => FACT_KINDS.has(e.kind));
+      const rest = pageEvents.filter((e) => !FACT_KINDS.has(e.kind));
 
       await this.db.withTransactionAsync(async () => {
         for (const e of facts) await applyEventSafe(this.db, e);

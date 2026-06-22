@@ -45,7 +45,7 @@ type PullPage struct {
 // more, so we report hasMore=true.
 func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, error) {
 	q := gen.New(s.pool)
-	var events []Event
+	events := make([]Event, 0)
 	anyFull := false
 
 	sales, err := q.PullSales(ctx, gen.PullSalesParams{Sequence: c.Sale, Limit: limit})

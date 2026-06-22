@@ -177,6 +177,23 @@ describe("SyncEngine.pullAll", () => {
     expect(sale?.voided_at).not.toBeNull();
   });
 
+  it("trata events:null do servidor sem TypeError e salva cursor", async () => {
+    // Go serializa nil slice como null — o frontend deve tolerar isso
+    mockPullPage.mockResolvedValueOnce({
+      events: null,
+      next_cursor: "cursor-null-safe",
+      has_more: false,
+    });
+
+    const db = await freshDb();
+    await new SyncEngine(db).pullAll(); // não deve lançar TypeError
+
+    const state = await db.getFirstAsync<{ pull_cursor: string }>(
+      `SELECT pull_cursor FROM sync_state WHERE id = 1`
+    );
+    expect(state?.pull_cursor).toBe("cursor-null-safe");
+  });
+
   it("inventário não é alterado quando venda e void chegam juntos", async () => {
     const saleUuid = "sale-two-pass-inv";
     mockPullPage.mockResolvedValueOnce({
