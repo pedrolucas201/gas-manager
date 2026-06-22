@@ -141,7 +141,14 @@ async function request<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
-  const token = await getIdToken();
+  let token: string | null;
+  try {
+    token = await getIdToken();
+  } catch {
+    // Firebase can throw network errors when refreshing an expired token.
+    // Treat this as a transient network failure so the engine retries.
+    throw new NetworkError("Falha ao obter token de autenticação");
+  }
   if (token === null) {
     throw new AuthError("Sessão expirada ou usuário não autenticado");
   }

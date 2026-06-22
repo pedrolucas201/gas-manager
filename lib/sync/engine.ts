@@ -38,6 +38,8 @@ async function applyEventSafe(db: SQLiteDatabase, e: unknown): Promise<void> {
 
 export class SyncEngine {
   private _stopped = false;
+  private _syncing = false;
+  private _retryTimer?: ReturnType<typeof setTimeout>;
   private _unsubscribe?: () => void;
 
   constructor(private db: SQLiteDatabase) {}
@@ -148,17 +150,28 @@ export class SyncEngine {
   }
 
   async syncNow(): Promise<void> {
-    if (this._stopped) return;
+    if (this._stopped || this._syncing) return;
+    this._syncing = true;
+    clearTimeout(this._retryTimer);
     useSyncStore.getState().setStatus("syncing");
     try {
       await this.pullAll();
       await this.pushOnce();
       useSyncStore.getState().setStatus("idle");
     } catch (e) {
+      if (e instanceof AuthError) {
+        await signOutUser();
+        return;
+      }
       if (!(e instanceof NetworkError)) {
         console.warn("[SyncEngine] syncNow erro:", e);
       }
       useSyncStore.getState().setStatus("error");
+      if (!this._stopped) {
+        this._retryTimer = setTimeout(() => this.syncNow(), 30_000);
+      }
+    } finally {
+      this._syncing = false;
     }
   }
 
@@ -170,6 +183,8 @@ export class SyncEngine {
 
   stop(): void {
     this._stopped = true;
+    clearTimeout(this._retryTimer);
+    this._retryTimer = undefined;
     this._unsubscribe?.();
     this._unsubscribe = undefined;
   }
