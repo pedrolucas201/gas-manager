@@ -291,14 +291,15 @@ describe("applyEvent — sale", () => {
     expect(inv.empty_qty).toBe(2);
   });
 
-  it("full_qty não cai abaixo de 0 (MAX(0, full_qty - qty))", async () => {
+  it("full_qty pode ficar negativo (sem clamp, paridade com o backend)", async () => {
     const db = await freshDb();
     await setInventory(db, 0, 0);
 
     await applyEvent(db, makeSaleEvent({ uuid: "sale-uuid-0003", quantity: 5 }));
 
     const inv = await getInventory(db);
-    expect(inv.full_qty).toBe(0);
+    // Vender 5 sem estoque → -5 (sinal real de venda além do cadastrado).
+    expect(inv.full_qty).toBe(-5);
   });
 
   it("dedupe: aplicar o mesmo uuid duas vezes é no-op (sem dupla contagem)", async () => {
@@ -589,7 +590,7 @@ describe("applyEvent — stock_adjustment", () => {
     expect((await getInventory(db)).full_qty).toBe(8);
   });
 
-  it("aplica delta negativo em full_qty (clampado em 0)", async () => {
+  it("aplica delta negativo em full_qty (pode ficar negativo, sem clamp)", async () => {
     const db = await freshDb();
     await setInventory(db, 2, 0);
 
@@ -598,7 +599,7 @@ describe("applyEvent — stock_adjustment", () => {
       makeStockAdjEvent({ uuid: "adj-uuid-0002", field: "full", delta: -10 })
     );
 
-    expect((await getInventory(db)).full_qty).toBe(0); // MAX(0, 2-10)
+    expect((await getInventory(db)).full_qty).toBe(-8); // 2 + (-10), sem clamp
   });
 
   it("aplica delta em empty_qty", async () => {
@@ -1021,5 +1022,54 @@ describe("applySettlement — dedup com applied_events (evento local)", () => {
       `SELECT balance FROM customers WHERE uuid = ?`, [custUuid]
     );
     expect(c?.balance).toBeCloseTo(0, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Convergência: a mesma sequência de eventos leva ao mesmo estoque,
+// independente da ordem, e reaplicar é no-op (idempotência).
+// ---------------------------------------------------------------------------
+
+describe("convergência de estoque", () => {
+  it("ordem diferente de eventos converge para o mesmo estoque (sem clamp)", async () => {
+    const dbA = await freshDb();
+    const dbB = await freshDb();
+    await setInventory(dbA, 5, 0);
+    await setInventory(dbB, 5, 0);
+
+    const restock = makeRestockEvent({ uuid: "r-conv-1", quantity: 18, sequence: 1 });
+    const sale = makeSaleEvent({ uuid: "s-conv-1", quantity: 20, sequence: 2 });
+
+    // Device A aplica restock depois venda; device B aplica na ordem inversa.
+    await applyEvent(dbA, restock);
+    await applyEvent(dbA, sale);
+    await applyEvent(dbB, sale);
+    await applyEvent(dbB, restock);
+
+    const a = await getInventory(dbA);
+    const b = await getInventory(dbB);
+    // 5 + 18 - 20 = 3, igual nas duas ordens (soma pura é comutativa).
+    expect(a.full_qty).toBe(3);
+    expect(b.full_qty).toBe(3);
+  });
+
+  it("reaplicar a mesma lista de eventos não altera o estoque (idempotência)", async () => {
+    const db = await freshDb();
+    await setInventory(db, 10, 0);
+
+    const events = [
+      makeRestockEvent({ uuid: "r-idem-1", quantity: 5, sequence: 1 }),
+      makeSaleEvent({ uuid: "s-idem-1", quantity: 3, sequence: 2 }),
+      makeStockAdjEvent({ uuid: "a-idem-1", field: "full", delta: 2, sequence: 3 }),
+    ];
+
+    for (const e of events) await applyEvent(db, e);
+    const first = await getInventory(db);
+    expect(first.full_qty).toBe(14); // 10 + 5 - 3 + 2
+
+    // Pull traz os mesmos eventos de novo — não deve mudar nada.
+    for (const e of events) await applyEvent(db, e);
+    const second = await getInventory(db);
+    expect(second.full_qty).toBe(14);
   });
 });

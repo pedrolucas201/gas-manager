@@ -1,6 +1,7 @@
 import { initDatabase } from "@/db/database";
 import { createTestDb } from "@/db/__tests__/helpers/testdb";
 import { addRestock, updateInventory, updateCylinderPrice } from "@/db/queries/inventory";
+import { applyEvent } from "@/lib/sync/apply";
 import { SERVER_P13_UUID } from "@/lib/sync/constants";
 import type { SQLiteDatabase } from "expo-sqlite";
 
@@ -96,6 +97,111 @@ describe("updateInventory", () => {
 
     const rows = await db.getAllAsync(`SELECT * FROM sync_outbox WHERE status = 'pending'`);
     expect(rows).toHaveLength(0);
+  });
+
+  it("grava o uuid do ajuste em applied_events", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await db.runAsync(
+      `UPDATE inventory SET full_qty = 10, empty_qty = 0 WHERE cylinder_type_id = ?`, [cid]
+    );
+
+    await updateInventory(db, cid, 15, 0);
+
+    const adj = await db.getFirstAsync<{ event_uuid: string }>(
+      `SELECT event_uuid FROM sync_outbox WHERE kind = 'stock_adjustment' LIMIT 1`
+    );
+    expect(adj?.event_uuid).toBeTruthy();
+    const applied = await db.getFirstAsync<{ event_uuid: string }>(
+      `SELECT event_uuid FROM applied_events WHERE event_uuid = ?`, [adj!.event_uuid]
+    );
+    expect(applied?.event_uuid).toBe(adj!.event_uuid);
+  });
+
+  it("grava applied_events para ajustes de full e empty separadamente", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await db.runAsync(
+      `UPDATE inventory SET full_qty = 10, empty_qty = 0 WHERE cylinder_type_id = ?`, [cid]
+    );
+
+    await updateInventory(db, cid, 12, 5);
+
+    const outbox = await db.getAllAsync<{ event_uuid: string }>(
+      `SELECT event_uuid FROM sync_outbox WHERE kind = 'stock_adjustment'`
+    );
+    expect(outbox).toHaveLength(2);
+    for (const o of outbox) {
+      const applied = await db.getFirstAsync<{ event_uuid: string }>(
+        `SELECT event_uuid FROM applied_events WHERE event_uuid = ?`, [o.event_uuid]
+      );
+      expect(applied?.event_uuid).toBe(o.event_uuid);
+    }
+  });
+
+  it("IDEMPOTÊNCIA: ajuste local não re-altera o estoque ao voltar no pull", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await db.runAsync(
+      `UPDATE inventory SET full_qty = 10, empty_qty = 0 WHERE cylinder_type_id = ?`, [cid]
+    );
+
+    await updateInventory(db, cid, 13, 0); // delta +3
+    const before = await db.getFirstAsync<{ full_qty: number }>(
+      `SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]
+    );
+    expect(before?.full_qty).toBe(13);
+
+    const adj = await db.getFirstAsync<{ event_uuid: string }>(
+      `SELECT event_uuid FROM sync_outbox WHERE kind = 'stock_adjustment' LIMIT 1`
+    );
+    await applyEvent(db, {
+      kind: "stock_adjustment",
+      sequence: 1,
+      server_received_at: "2026-06-23T10:00:00Z",
+      data: {
+        id: adj!.event_uuid,
+        cylinder_type_id: SERVER_P13_UUID,
+        field: "full",
+        delta: 3,
+        reason: null,
+        server_received_at: "2026-06-23T10:00:00Z",
+        sequence: 1,
+      },
+    });
+
+    const after = await db.getFirstAsync<{ full_qty: number }>(
+      `SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]
+    );
+    expect(after?.full_qty).toBe(13); // não virou 16
+  });
+
+  it("ajuste de OUTRO device (uuid não local) ainda aplica normalmente", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await db.runAsync(
+      `UPDATE inventory SET full_qty = 10, empty_qty = 0 WHERE cylinder_type_id = ?`, [cid]
+    );
+
+    await applyEvent(db, {
+      kind: "stock_adjustment",
+      sequence: 2,
+      server_received_at: "2026-06-23T10:00:00Z",
+      data: {
+        id: "remote-adj-0001",
+        cylinder_type_id: SERVER_P13_UUID,
+        field: "full",
+        delta: 5,
+        reason: null,
+        server_received_at: "2026-06-23T10:00:00Z",
+        sequence: 2,
+      },
+    });
+
+    const inv = await db.getFirstAsync<{ full_qty: number }>(
+      `SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]
+    );
+    expect(inv?.full_qty).toBe(15);
   });
 });
 

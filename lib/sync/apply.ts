@@ -269,10 +269,12 @@ async function applySale(db: SQLiteDatabase, d: PulledSale): Promise<void> {
     return;
   }
 
-  // Bump inventário: full_qty -= quantity (mín 0), empty_qty += qty se troca.
+  // Bump inventário: full_qty -= quantity, empty_qty += qty se troca.
+  // Sem clamp — paridade com o backend (BumpInventoryForSale não clampa) e
+  // convergência determinística (MAX não é comutativo nem associativo).
   await db.runAsync(
     `UPDATE inventory
-     SET full_qty  = MAX(0, full_qty - ?),
+     SET full_qty  = full_qty - ?,
          empty_qty = empty_qty + ?
      WHERE cylinder_type_id = ?`,
     [d.quantity, d.is_exchange ? d.quantity : 0, cylinderTypeId]
@@ -318,11 +320,12 @@ async function applyVoidSale(db: SQLiteDatabase, d: PulledVoidSale): Promise<voi
     [sale.id]
   );
 
-  // Reverte inventário: full_qty += quantity; empty_qty -= qty (se troca, mín 0).
+  // Reverte inventário: full_qty += quantity; empty_qty -= qty (se troca).
+  // Sem clamp — simétrico ao applySale e à paridade com o backend.
   await db.runAsync(
     `UPDATE inventory
      SET full_qty  = full_qty + ?,
-         empty_qty = MAX(0, empty_qty - ?)
+         empty_qty = empty_qty - ?
      WHERE cylinder_type_id = ?`,
     [sale.quantity, sale.is_exchange ? sale.quantity : 0, sale.cylinder_type_id]
   );
@@ -376,18 +379,19 @@ async function applyStockAdj(db: SQLiteDatabase, d: PulledStockAdj): Promise<voi
 
   if (dedup.changes === 0) return; // já aplicado
 
-  // Aplica o delta. Clampado em 0 para evitar negativo.
+  // Aplica o delta sem clamp — paridade com o backend (BumpInventoryField não
+  // clampa) e convergência determinística. Negativo é sinal real, não erro.
   if (d.field === "full") {
     await db.runAsync(
       `UPDATE inventory
-       SET full_qty = MAX(0, full_qty + ?)
+       SET full_qty = full_qty + ?
        WHERE cylinder_type_id = ?`,
       [d.delta, cylinderTypeId]
     );
   } else {
     await db.runAsync(
       `UPDATE inventory
-       SET empty_qty = MAX(0, empty_qty + ?)
+       SET empty_qty = empty_qty + ?
        WHERE cylinder_type_id = ?`,
       [d.delta, cylinderTypeId]
     );

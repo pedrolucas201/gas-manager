@@ -105,6 +105,13 @@ export async function updateInventory(
         }),
         client_created_at: now,
       });
+      // Marca como aplicado para que applyStockAdj (pull path) não re-aplique
+      // o delta quando o evento voltar do servidor — senão o estoque "muda
+      // sozinho" a cada sync. Mesmo padrão de settleCustomerDebt.
+      await db.runAsync(
+        `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+        [uuid]
+      );
     }
 
     if (empty_qty !== cur.empty_qty) {
@@ -125,6 +132,10 @@ export async function updateInventory(
         }),
         client_created_at: now,
       });
+      await db.runAsync(
+        `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+        [uuid]
+      );
     }
   });
 }

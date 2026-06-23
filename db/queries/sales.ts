@@ -37,8 +37,11 @@ export async function registerSale(
       ]
     );
 
+    // Sem clamp: o estoque acompanha o backend (que também não clampa). Negativo
+    // = vendeu mais do que estava cadastrado — sinal real, não erro a esconder.
+    // Clamp quebraria a convergência (MAX não é comutativo/associativo).
     await db.runAsync(
-      `UPDATE inventory SET full_qty = MAX(0, full_qty - ?), empty_qty = empty_qty + ?
+      `UPDATE inventory SET full_qty = full_qty - ?, empty_qty = empty_qty + ?
        WHERE cylinder_type_id = ?`,
       [data.quantity, data.is_exchange ? data.quantity : 0, data.cylinder_type_id]
     );
@@ -96,8 +99,9 @@ export async function voidSale(db: SQLiteDatabase, id: number) {
       [id]
     );
 
+    // Reverso simétrico ao registerSale (sem clamp, para paridade com o backend).
     await db.runAsync(
-      `UPDATE inventory SET full_qty = full_qty + ?, empty_qty = MAX(0, empty_qty - ?)
+      `UPDATE inventory SET full_qty = full_qty + ?, empty_qty = empty_qty - ?
        WHERE cylinder_type_id = ?`,
       [sale.quantity, sale.is_exchange ? sale.quantity : 0, sale.cylinder_type_id]
     );
