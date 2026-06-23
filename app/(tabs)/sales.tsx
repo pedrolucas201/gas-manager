@@ -30,7 +30,7 @@ const paymentColors: Record<PaymentMethod, string> = {
   fiado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
-function SaleCard({ item, onDelete }: { item: Sale; onDelete: (id: number) => void }) {
+function SaleCard({ item, onDelete, onEdit }: { item: Sale; onDelete: (id: number) => void; onEdit: (id: number) => void }) {
   const colors = paymentColors[item.payment_method];
   const parts = colors.split(" ");
   const bg = parts.slice(0, 2).join(" ");
@@ -49,6 +49,9 @@ function SaleCard({ item, onDelete }: { item: Sale; onDelete: (id: number) => vo
         </View>
         <View className="flex-row items-center gap-3">
           <Text className="font-bold text-gray-900 dark:text-gray-50 text-base">{formatCurrency(item.total)}</Text>
+          <TouchableOpacity onPress={() => onEdit(item.id)} className="p-1">
+            <Ionicons name="pencil-outline" size={16} color="#9ca3af" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => onDelete(item.id)} className="p-1">
             <Ionicons name="trash-outline" size={16} color="#ef4444" />
           </TouchableOpacity>
@@ -111,7 +114,13 @@ export default function SalesScreen() {
       <FlatList
         data={sales}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <SaleCard item={item} onDelete={handleDelete} />}
+        renderItem={({ item }) => (
+          <SaleCard
+            item={item}
+            onDelete={handleDelete}
+            onEdit={(id) => router.push({ pathname: "/sale-edit", params: { saleId: id } })}
+          />
+        )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">

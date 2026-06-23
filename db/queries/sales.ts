@@ -118,6 +118,20 @@ export async function voidSale(db: SQLiteDatabase, id: number) {
   });
 }
 
+export async function getSaleById(
+  db: SQLiteDatabase,
+  id: number
+): Promise<Sale | null> {
+  return db.getFirstAsync<Sale>(
+    `SELECT s.*, c.name as customer_name, ct.name as cylinder_name
+     FROM sales s
+     LEFT JOIN customers c ON s.customer_id = c.id
+     JOIN cylinder_types ct ON s.cylinder_type_id = ct.id
+     WHERE s.id = ?`,
+    [id]
+  );
+}
+
 export async function getSales(db: SQLiteDatabase, limit = 50): Promise<Sale[]> {
   return db.getAllAsync<Sale>(
     `SELECT s.*, c.name as customer_name, ct.name as cylinder_name
