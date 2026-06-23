@@ -52,6 +52,15 @@ export interface Restock {
   cylinder_name?: string;
 }
 
+export interface Expense {
+  id: number;
+  uuid: string;
+  category: string;
+  description: string | null;
+  amount: number;
+  created_at: string;
+}
+
 export interface DebtSettlement {
   id: number;
   uuid: string;

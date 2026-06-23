@@ -83,14 +83,21 @@ export interface SettlePayload {
   payment_method: string;
 }
 
+export interface ExpensePayload {
+  category: string;
+  description: string | null;
+  amount: string; // decimal string
+}
+
 export interface PushEvent {
-  kind: "sale" | "restock" | "stock_adjustment" | "debt_settlement";
+  kind: "sale" | "restock" | "stock_adjustment" | "debt_settlement" | "expense";
   id: string; // client UUID
   client_created_at: string; // RFC3339
   sale?: SalePayload;
   restock?: RestockPayload;
   stock_adjustment?: StockAdjPayload;
   debt_settlement?: SettlePayload;
+  expense?: ExpensePayload;
 }
 
 export interface PushResult {

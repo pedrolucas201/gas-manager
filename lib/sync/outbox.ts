@@ -11,7 +11,8 @@ export type OutboxKind =
   | "void_sale"
   | "customer_upsert"
   | "customer_delete"
-  | "cylinder_upsert";
+  | "cylinder_upsert"
+  | "expense";
 
 export interface OutboxEntry {
   event_uuid: string;

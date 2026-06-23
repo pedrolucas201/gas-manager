@@ -131,6 +131,14 @@ interface PulledVoidSale {
   id: string;
 }
 
+interface PulledExpense {
+  id: string;
+  category: string;
+  description: string | null;
+  amount: string;
+  server_received_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Ponto de entrada público
 // ---------------------------------------------------------------------------
@@ -159,6 +167,8 @@ export async function applyEvent(db: SQLiteDatabase, event: PullEvent): Promise<
       return applyCustomerDelete(db, event.data as PulledCustomerDelete);
     case "cylinder_upsert":
       return applyCylinderUpsert(db, event.data as PulledCylinderUpsert);
+    case "expense":
+      return applyExpense(db, event.data as PulledExpense);
     default:
       // Kind desconhecido — ignorar silenciosamente para compatibilidade futura.
       return;
@@ -453,6 +463,14 @@ async function applyCustomerDelete(
     [existing.id]
   );
   await db.runAsync(`DELETE FROM customers WHERE id = ?`, [existing.id]);
+}
+
+async function applyExpense(db: SQLiteDatabase, d: PulledExpense): Promise<void> {
+  await db.runAsync(
+    `INSERT OR IGNORE INTO expenses (uuid, category, description, amount)
+     VALUES (?, ?, ?, ?)`,
+    [d.id, d.category, d.description ?? null, parseFloat(d.amount)]
+  );
 }
 
 async function applyCylinderUpsert(

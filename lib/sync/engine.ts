@@ -26,6 +26,7 @@ const FACT_KINDS = new Set([
   "restock",
   "stock_adjustment",
   "debt_settlement",
+  "expense",
 ]);
 
 async function applyEventSafe(db: SQLiteDatabase, e: unknown): Promise<void> {

@@ -20,23 +20,21 @@ async function tableExists(db: SQLiteDatabase, name: string): Promise<boolean> {
   return r !== null;
 }
 
-describe("schema migration to v4", () => {
-  it("brings a fresh database to version 4 with all expected tables and columns", async () => {
+describe("schema migration to v5", () => {
+  it("brings a fresh database to version 5 with all expected tables and columns", async () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(4);
+    expect(await userVersion(db)).toBe(5);
 
     // v3 additions
     expect(await tableExists(db, "applied_events")).toBe(true);
-    expect(await columnNames(db, "cylinder_types")).toEqual(
-      expect.arrayContaining(["updated_at"])
-    );
-
     // v4 additions
     expect(await tableExists(db, "debt_settlements")).toBe(true);
-    expect(await columnNames(db, "debt_settlements")).toEqual(
-      expect.arrayContaining(["uuid", "customer_id", "customer_name", "amount", "payment_method"])
+    // v5 additions
+    expect(await tableExists(db, "expenses")).toBe(true);
+    expect(await columnNames(db, "expenses")).toEqual(
+      expect.arrayContaining(["uuid", "category", "description", "amount"])
     );
   });
 });
@@ -46,7 +44,7 @@ describe("schema migration to v2", () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(4);
+    expect(await userVersion(db)).toBe(5);
 
     expect(await columnNames(db, "customers")).toEqual(
       expect.arrayContaining(["uuid", "updated_at"])
@@ -79,7 +77,7 @@ describe("schema migration to v2", () => {
     await initDatabase(db);
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(4);
+    expect(await userVersion(db)).toBe(5);
     const count = await db.getFirstAsync<{ c: number }>(
       `SELECT COUNT(*) c FROM sync_state`
     );

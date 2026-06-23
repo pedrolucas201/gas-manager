@@ -896,6 +896,64 @@ describe("applyEvent — cylinder_upsert", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Testes: expense
+// ---------------------------------------------------------------------------
+
+describe("applyEvent — expense", () => {
+  it("insere despesa na tabela local", async () => {
+    const db = await freshDb();
+
+    await applyEvent(db, {
+      kind: "expense",
+      sequence: 1,
+      server_received_at: new Date().toISOString(),
+      data: {
+        id: "exp-uuid-0001",
+        category: "Gasolina",
+        description: null,
+        amount: "150.00",
+        server_received_at: new Date().toISOString(),
+      },
+    });
+
+    const row = await db.getFirstAsync<{
+      uuid: string;
+      category: string;
+      amount: number;
+    }>(`SELECT * FROM expenses WHERE uuid = 'exp-uuid-0001'`);
+
+    expect(row).toBeTruthy();
+    expect(row!.category).toBe("Gasolina");
+    expect(row!.amount).toBeCloseTo(150, 5);
+  });
+
+  it("idempotente: mesmo uuid nao duplica", async () => {
+    const db = await freshDb();
+
+    const ev = {
+      kind: "expense" as const,
+      sequence: 1,
+      server_received_at: new Date().toISOString(),
+      data: {
+        id: "exp-uuid-0002",
+        category: "Pneu",
+        description: null,
+        amount: "80.00",
+        server_received_at: new Date().toISOString(),
+      },
+    };
+
+    await applyEvent(db, ev);
+    await applyEvent(db, ev);
+
+    const count = await db.getFirstAsync<{ c: number }>(
+      `SELECT COUNT(*) c FROM expenses WHERE uuid = 'exp-uuid-0002'`
+    );
+    expect(count?.c).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Testes: eventos desconhecidos
 // ---------------------------------------------------------------------------
 
