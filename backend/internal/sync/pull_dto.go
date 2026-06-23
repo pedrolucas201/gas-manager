@@ -19,16 +19,17 @@ import (
 // fields (voided_at, server_received_at, sequence).
 type SaleDTO struct {
 	ID               string  `json:"id"`
-	CustomerID       *string `json:"customer_id"`       // null when no customer
+	CustomerID       *string `json:"customer_id"`        // null when no customer
 	CylinderTypeID   string  `json:"cylinder_type_id"`
 	Quantity         int32   `json:"quantity"`
-	UnitPrice        string  `json:"unit_price"`        // decimal string
-	CostPrice        string  `json:"cost_price"`        // decimal string
-	Total            string  `json:"total"`             // decimal string
+	UnitPrice        string  `json:"unit_price"`         // decimal string
+	CostPrice        string  `json:"cost_price"`         // decimal string
+	Total            string  `json:"total"`              // decimal string
 	PaymentMethod    string  `json:"payment_method"`
 	IsExchange       bool    `json:"is_exchange"`
-	VoidedAt         *string `json:"voided_at"`         // RFC3339 or null
+	VoidedAt         *string `json:"voided_at"`          // RFC3339 or null
 	ServerReceivedAt string  `json:"server_received_at"` // RFC3339
+	ClientCreatedAt  string  `json:"client_created_at"`  // RFC3339
 	Sequence         int64   `json:"sequence"`
 }
 
@@ -126,6 +127,7 @@ func mapSaleRow(r gen.PullSalesRow) SaleDTO {
 		IsExchange:       r.IsExchange,
 		VoidedAt:         nullableTimestamptzToWire(r.VoidedAt),
 		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		ClientCreatedAt:  timestamptzToWire(r.ClientCreatedAt),
 		Sequence:         r.Sequence,
 	}
 }

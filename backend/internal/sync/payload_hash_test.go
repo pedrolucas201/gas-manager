@@ -5,7 +5,8 @@ import "testing"
 func TestPayloadHash_StableAcrossCalls(t *testing.T) {
 	e := PushEvent{Kind: "sale", ID: "abc",
 		Sale: &SalePayload{CylinderTypeID: "c1", Quantity: 2, Total: "240.00", PaymentMethod: "cash"}}
-	if PayloadHash(e) != PayloadHash(e) {
+	h1, h2 := PayloadHash(e), PayloadHash(e)
+	if h1 != h2 {
 		t.Fatal("hash must be deterministic")
 	}
 }

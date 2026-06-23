@@ -66,7 +66,7 @@ RETURNING sequence, server_received_at;
 
 -- name: PullSales :many
 SELECT id, customer_id, cylinder_type_id, quantity, unit_price, cost_price, total,
-  payment_method, is_exchange, voided_at, server_received_at, sequence
+  payment_method, is_exchange, voided_at, server_received_at, client_created_at, sequence
 FROM sales WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: PullRestocks :many

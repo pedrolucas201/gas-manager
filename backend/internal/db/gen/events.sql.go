@@ -560,7 +560,7 @@ func (q *Queries) PullSaleVoids(ctx context.Context, arg PullSaleVoidsParams) ([
 
 const pullSales = `-- name: PullSales :many
 SELECT id, customer_id, cylinder_type_id, quantity, unit_price, cost_price, total,
-  payment_method, is_exchange, voided_at, server_received_at, sequence
+  payment_method, is_exchange, voided_at, server_received_at, client_created_at, sequence
 FROM sales WHERE sequence > $1 ORDER BY sequence LIMIT $2
 `
 
@@ -581,6 +581,7 @@ type PullSalesRow struct {
 	IsExchange       bool
 	VoidedAt         pgtype.Timestamptz
 	ServerReceivedAt pgtype.Timestamptz
+	ClientCreatedAt  pgtype.Timestamptz
 	Sequence         int64
 }
 
@@ -605,6 +606,7 @@ func (q *Queries) PullSales(ctx context.Context, arg PullSalesParams) ([]PullSal
 			&i.IsExchange,
 			&i.VoidedAt,
 			&i.ServerReceivedAt,
+			&i.ClientCreatedAt,
 			&i.Sequence,
 		); err != nil {
 			return nil, err

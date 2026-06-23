@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -198,6 +199,7 @@ func (s *Service) HandlePull(w http.ResponseWriter, r *http.Request) {
 	limit := parseLimit(r.URL.Query().Get("limit"), 200)
 	page, err := s.Pull(r.Context(), cur, limit)
 	if err != nil {
+		log.Printf("pull error: %v", err)
 		httpx.Error(w, http.StatusInternalServerError, "pull_failed")
 		return
 	}

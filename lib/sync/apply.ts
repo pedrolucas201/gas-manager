@@ -81,6 +81,7 @@ interface PulledSale {
   is_exchange: boolean;
   voided_at: string | null;
   server_received_at: string;
+  client_created_at: string;
 }
 
 interface PulledRestock {
@@ -264,7 +265,7 @@ async function applySale(db: SQLiteDatabase, d: PulledSale): Promise<void> {
       total,
       d.payment_method,
       isExchange,
-      d.server_received_at,
+      d.client_created_at,
       d.voided_at ?? null,
     ]
   );
