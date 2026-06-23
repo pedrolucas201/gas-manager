@@ -175,3 +175,24 @@ type VoidSaleDTO struct {
 func mapVoidRow(r gen.PullSaleVoidsRow) VoidSaleDTO {
 	return VoidSaleDTO{ID: uuidToWire(r.SaleID)}
 }
+
+// ExpenseDTO is the read-side DTO for expense events.
+type ExpenseDTO struct {
+	ID               string  `json:"id"`
+	Category         string  `json:"category"`
+	Description      *string `json:"description"`
+	Amount           string  `json:"amount"` // decimal string
+	ServerReceivedAt string  `json:"server_received_at"`
+	Sequence         int64   `json:"sequence"`
+}
+
+func mapExpenseRow(r gen.PullExpensesRow) ExpenseDTO {
+	return ExpenseDTO{
+		ID:               uuidToWire(r.ID),
+		Category:         r.Category,
+		Description:      r.Description,
+		Amount:           numericToWire(r.Amount),
+		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		Sequence:         r.Sequence,
+	}
+}

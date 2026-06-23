@@ -146,6 +146,9 @@ func (s *Service) existingHash(ctx context.Context, e PushEvent) (string, bool, 
 	case "debt_settlement":
 		row, err := q.GetDebtSettlementByID(ctx, mustUUID(e.ID))
 		return scanHash(row.PayloadHash, err)
+	case "expense":
+		row, err := q.GetExpenseByID(ctx, mustUUID(e.ID))
+		return scanHash(row.PayloadHash, err)
 	}
 	return "", false, errors.New("unknown kind")
 }
@@ -270,6 +273,22 @@ func (s *Service) applyEvent(ctx context.Context, tx pgx.Tx, userID string, e Pu
 			ID:      mustUUID(p.CustomerID),
 			Balance: numeric("-" + p.Amount),
 		}); err != nil {
+			return 0, time.Time{}, err
+		}
+		return ins.Sequence, toTime(ins.ServerReceivedAt), nil
+
+	case "expense":
+		p := e.Expense
+		ins, err := q.InsertExpense(ctx, gen.InsertExpenseParams{
+			ID:              mustUUID(e.ID),
+			Category:        p.Category,
+			Description:     p.Description,
+			Amount:          numeric(p.Amount),
+			PayloadHash:     hash,
+			CreatedBy:       userID,
+			ClientCreatedAt: timestamptz(e.ClientCreatedAt),
+		})
+		if err != nil {
 			return 0, time.Time{}, err
 		}
 		return ins.Sequence, toTime(ins.ServerReceivedAt), nil

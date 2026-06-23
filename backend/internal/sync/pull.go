@@ -22,6 +22,7 @@ type Cursor struct {
 	Settle  int64 `json:"settle"`
 	Void    int64 `json:"void"`
 	Catalog int64 `json:"catalog"`
+	Expense int64 `json:"expense"`
 }
 
 type Event struct {
@@ -118,6 +119,17 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		events = append(events, Event{Kind: r.Kind, Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: rawData})
 	}
 
+	expenses, err := q.PullExpenses(ctx, gen.PullExpensesParams{Sequence: c.Expense, Limit: limit})
+	if err != nil {
+		return PullPage{}, err
+	}
+	if int32(len(expenses)) == limit {
+		anyFull = true
+	}
+	for _, r := range expenses {
+		events = append(events, Event{Kind: "expense", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapExpenseRow(r)})
+	}
+
 	sort.SliceStable(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 
 	hasMore := anyFull || int32(len(events)) > limit
@@ -152,6 +164,10 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		case "customer_upsert", "customer_delete", "cylinder_upsert":
 			if e.Sequence > next.Catalog {
 				next.Catalog = e.Sequence
+			}
+		case "expense":
+			if e.Sequence > next.Expense {
+				next.Expense = e.Sequence
 			}
 		}
 	}
