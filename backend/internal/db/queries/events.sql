@@ -104,3 +104,23 @@ RETURNING sequence, server_received_at;
 -- name: PullExpenses :many
 SELECT id, category, description, amount, server_received_at, sequence
 FROM expenses WHERE sequence > $1 ORDER BY sequence LIMIT $2;
+
+-- name: GetStockSetByID :one
+SELECT id, payload_hash FROM stock_sets WHERE id = $1;
+
+-- name: InsertStockSet :one
+INSERT INTO stock_sets (id, cylinder_type_id, full_qty, empty_qty, payload_hash, created_by, client_created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING sequence, server_received_at;
+
+-- name: ApplyStockSet :exec
+UPDATE inventory
+SET full_qty   = sqlc.arg(full_qty)::int,
+    empty_qty  = sqlc.arg(empty_qty)::int,
+    last_set_at = sqlc.arg(client_created_at)::timestamptz
+WHERE cylinder_type_id = sqlc.arg(cylinder_type_id)
+  AND (last_set_at IS NULL OR sqlc.arg(client_created_at)::timestamptz > last_set_at);
+
+-- name: PullStockSets :many
+SELECT id, cylinder_type_id, full_qty, empty_qty, client_created_at, server_received_at, sequence
+FROM stock_sets WHERE sequence > $1 ORDER BY sequence LIMIT $2;

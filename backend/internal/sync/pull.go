@@ -16,13 +16,14 @@ import (
 // Cursor holds the last-seen sequence per fact table. Each table owns an
 // independent BIGSERIAL, so the cursor advances each table independently.
 type Cursor struct {
-	Sale    int64 `json:"sale"`
-	Restock int64 `json:"restock"`
-	Adjust  int64 `json:"adjust"`
-	Settle  int64 `json:"settle"`
-	Void    int64 `json:"void"`
-	Catalog int64 `json:"catalog"`
-	Expense int64 `json:"expense"`
+	Sale     int64 `json:"sale"`
+	Restock  int64 `json:"restock"`
+	Adjust   int64 `json:"adjust"`
+	Settle   int64 `json:"settle"`
+	Void     int64 `json:"void"`
+	Catalog  int64 `json:"catalog"`
+	Expense  int64 `json:"expense"`
+	StockSet int64 `json:"stock_set"`
 }
 
 type Event struct {
@@ -130,6 +131,17 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		events = append(events, Event{Kind: "expense", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapExpenseRow(r)})
 	}
 
+	stockSets, err := q.PullStockSets(ctx, gen.PullStockSetsParams{Sequence: c.StockSet, Limit: limit})
+	if err != nil {
+		return PullPage{}, err
+	}
+	if int32(len(stockSets)) == limit {
+		anyFull = true
+	}
+	for _, r := range stockSets {
+		events = append(events, Event{Kind: "stock_set", Sequence: r.Sequence, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapStockSetRow(r)})
+	}
+
 	sort.SliceStable(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 
 	hasMore := anyFull || int32(len(events)) > limit
@@ -168,6 +180,10 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		case "expense":
 			if e.Sequence > next.Expense {
 				next.Expense = e.Sequence
+			}
+		case "stock_set":
+			if e.Sequence > next.StockSet {
+				next.StockSet = e.Sequence
 			}
 		}
 	}

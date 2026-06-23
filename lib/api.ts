@@ -89,13 +89,20 @@ export interface ExpensePayload {
   amount: string; // decimal string
 }
 
+export interface StockSetPayload {
+  cylinder_type_id: string;
+  full_qty: number;
+  empty_qty: number;
+}
+
 export interface PushEvent {
-  kind: "sale" | "restock" | "stock_adjustment" | "debt_settlement" | "expense";
+  kind: "sale" | "restock" | "stock_adjustment" | "stock_set" | "debt_settlement" | "expense";
   id: string; // client UUID
   client_created_at: string; // RFC3339
   sale?: SalePayload;
   restock?: RestockPayload;
   stock_adjustment?: StockAdjPayload;
+  stock_set?: StockSetPayload;
   debt_settlement?: SettlePayload;
   expense?: ExpensePayload;
 }

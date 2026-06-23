@@ -196,3 +196,26 @@ func mapExpenseRow(r gen.PullExpensesRow) ExpenseDTO {
 		Sequence:         r.Sequence,
 	}
 }
+
+// StockSetDTO is the read-side DTO for stock_set events.
+type StockSetDTO struct {
+	ID               string `json:"id"`
+	CylinderTypeID   string `json:"cylinder_type_id"`
+	FullQty          int32  `json:"full_qty"`
+	EmptyQty         int32  `json:"empty_qty"`
+	ClientCreatedAt  string `json:"client_created_at"` // RFC3339
+	ServerReceivedAt string `json:"server_received_at"` // RFC3339
+	Sequence         int64  `json:"sequence"`
+}
+
+func mapStockSetRow(r gen.PullStockSetsRow) StockSetDTO {
+	return StockSetDTO{
+		ID:               uuidToWire(r.ID),
+		CylinderTypeID:   uuidToWire(r.CylinderTypeID),
+		FullQty:          r.FullQty,
+		EmptyQty:         r.EmptyQty,
+		ClientCreatedAt:  timestamptzToWire(r.ClientCreatedAt),
+		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		Sequence:         r.Sequence,
+	}
+}

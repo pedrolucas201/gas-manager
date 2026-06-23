@@ -7,6 +7,7 @@ export type OutboxKind =
   | "sale"
   | "restock"
   | "stock_adjustment"
+  | "stock_set"
   | "debt_settlement"
   | "void_sale"
   | "customer_upsert"

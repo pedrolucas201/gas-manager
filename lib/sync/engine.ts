@@ -25,6 +25,7 @@ const FACT_KINDS = new Set([
   "sale",
   "restock",
   "stock_adjustment",
+  "stock_set",
   "debt_settlement",
   "expense",
 ]);

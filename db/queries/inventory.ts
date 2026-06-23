@@ -73,70 +73,41 @@ export async function updateInventory(
   full_qty: number,
   empty_qty: number
 ) {
-  const cur = await db.getFirstAsync<{ full_qty: number; empty_qty: number }>(
-    `SELECT full_qty, empty_qty FROM inventory WHERE cylinder_type_id = ?`,
-    [cylinder_type_id]
-  );
-  if (!cur) return;
-
+  const uuid = randomUUID();
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
+    // Aplica o valor absoluto localmente e registra o timestamp LWW.
     await db.runAsync(
-      `UPDATE inventory SET full_qty = ?, empty_qty = ? WHERE cylinder_type_id = ?`,
-      [full_qty, empty_qty, cylinder_type_id]
+      `UPDATE inventory SET full_qty = ?, empty_qty = ?, last_set_at = ? WHERE cylinder_type_id = ?`,
+      [full_qty, empty_qty, now, cylinder_type_id]
     );
 
-    if (full_qty !== cur.full_qty) {
-      const uuid = randomUUID();
-      await enqueue(db, {
-        event_uuid: uuid,
-        kind: "stock_adjustment",
-        payload: JSON.stringify({
-          kind: "stock_adjustment",
-          id: uuid,
-          client_created_at: now,
-          stock_adjustment: {
-            cylinder_type_id: SERVER_P13_UUID,
-            field: "full",
-            delta: full_qty - cur.full_qty,
-            reason: null,
-          },
-        }),
+    // Enfileira stock_set com valores absolutos. O servidor aplica LWW via
+    // client_created_at, garantindo que sets concorrentes de dispositivos
+    // diferentes convergem para o mais recente.
+    await enqueue(db, {
+      event_uuid: uuid,
+      kind: "stock_set",
+      payload: JSON.stringify({
+        kind: "stock_set",
+        id: uuid,
         client_created_at: now,
-      });
-      // Marca como aplicado para que applyStockAdj (pull path) não re-aplique
-      // o delta quando o evento voltar do servidor — senão o estoque "muda
-      // sozinho" a cada sync. Mesmo padrão de settleCustomerDebt.
-      await db.runAsync(
-        `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
-        [uuid]
-      );
-    }
+        stock_set: {
+          cylinder_type_id: SERVER_P13_UUID,
+          full_qty,
+          empty_qty,
+        },
+      }),
+      client_created_at: now,
+    });
 
-    if (empty_qty !== cur.empty_qty) {
-      const uuid = randomUUID();
-      await enqueue(db, {
-        event_uuid: uuid,
-        kind: "stock_adjustment",
-        payload: JSON.stringify({
-          kind: "stock_adjustment",
-          id: uuid,
-          client_created_at: now,
-          stock_adjustment: {
-            cylinder_type_id: SERVER_P13_UUID,
-            field: "empty",
-            delta: empty_qty - cur.empty_qty,
-            reason: null,
-          },
-        }),
-        client_created_at: now,
-      });
-      await db.runAsync(
-        `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
-        [uuid]
-      );
-    }
+    // Marca em applied_events para que applyStockSet (pull path) não
+    // re-aplique este evento quando ele voltar do servidor.
+    await db.runAsync(
+      `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+      [uuid]
+    );
   });
 }
 

@@ -149,6 +149,9 @@ func (s *Service) existingHash(ctx context.Context, e PushEvent) (string, bool, 
 	case "expense":
 		row, err := q.GetExpenseByID(ctx, mustUUID(e.ID))
 		return scanHash(row.PayloadHash, err)
+	case "stock_set":
+		row, err := q.GetStockSetByID(ctx, mustUUID(e.ID))
+		return scanHash(row.PayloadHash, err)
 	}
 	return "", false, errors.New("unknown kind")
 }
@@ -289,6 +292,30 @@ func (s *Service) applyEvent(ctx context.Context, tx pgx.Tx, userID string, e Pu
 			ClientCreatedAt: timestamptz(e.ClientCreatedAt),
 		})
 		if err != nil {
+			return 0, time.Time{}, err
+		}
+		return ins.Sequence, toTime(ins.ServerReceivedAt), nil
+
+	case "stock_set":
+		p := e.StockSet
+		ins, err := q.InsertStockSet(ctx, gen.InsertStockSetParams{
+			ID:              mustUUID(e.ID),
+			CylinderTypeID:  mustUUID(p.CylinderTypeID),
+			FullQty:         int32(p.FullQty),
+			EmptyQty:        int32(p.EmptyQty),
+			PayloadHash:     hash,
+			CreatedBy:       userID,
+			ClientCreatedAt: timestamptz(e.ClientCreatedAt),
+		})
+		if err != nil {
+			return 0, time.Time{}, err
+		}
+		if err := q.ApplyStockSet(ctx, gen.ApplyStockSetParams{
+			FullQty:         int32(p.FullQty),
+			EmptyQty:        int32(p.EmptyQty),
+			ClientCreatedAt: timestamptz(e.ClientCreatedAt),
+			CylinderTypeID:  mustUUID(p.CylinderTypeID),
+		}); err != nil {
 			return 0, time.Time{}, err
 		}
 		return ins.Sequence, toTime(ins.ServerReceivedAt), nil

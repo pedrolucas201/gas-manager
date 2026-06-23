@@ -2,7 +2,7 @@
 // the native module, which can't load under the Node (better-sqlite3) test harness.
 import type { SQLiteDatabase } from "expo-sqlite";
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 // A random UUID-shaped id (8-4-4-4-12) built entirely in SQLite via randomblob,
 // so the SAME backfill SQL runs identically under expo-sqlite (app) and
@@ -190,6 +190,19 @@ export async function migrate(db: SQLiteDatabase) {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_uuid ON expenses(uuid);
 
         PRAGMA user_version = 5;
+      `);
+    });
+  }
+
+  if (current < 6) {
+    // v6: inventory.last_set_at tracks the timestamp of the most recent stock_set
+    // event applied, enabling LWW resolution when multiple devices set inventory
+    // simultaneously. NULL means no set has been applied yet.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE inventory ADD COLUMN last_set_at TEXT;
+
+        PRAGMA user_version = 6;
       `);
     });
   }

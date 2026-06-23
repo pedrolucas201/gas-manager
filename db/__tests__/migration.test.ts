@@ -20,12 +20,12 @@ async function tableExists(db: SQLiteDatabase, name: string): Promise<boolean> {
   return r !== null;
 }
 
-describe("schema migration to v5", () => {
-  it("brings a fresh database to version 5 with all expected tables and columns", async () => {
+describe("schema migration to v6", () => {
+  it("brings a fresh database to version 6 with all expected tables and columns", async () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(5);
+    expect(await userVersion(db)).toBe(6);
 
     // v3 additions
     expect(await tableExists(db, "applied_events")).toBe(true);
@@ -36,6 +36,10 @@ describe("schema migration to v5", () => {
     expect(await columnNames(db, "expenses")).toEqual(
       expect.arrayContaining(["uuid", "category", "description", "amount"])
     );
+    // v6 additions
+    expect(await columnNames(db, "inventory")).toEqual(
+      expect.arrayContaining(["last_set_at"])
+    );
   });
 });
 
@@ -44,7 +48,7 @@ describe("schema migration to v2", () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(5);
+    expect(await userVersion(db)).toBe(6);
 
     expect(await columnNames(db, "customers")).toEqual(
       expect.arrayContaining(["uuid", "updated_at"])
@@ -72,12 +76,12 @@ describe("schema migration to v2", () => {
     expect(ct?.name).toBe("P13");
   });
 
-  it("is idempotent: running init twice stays at v4 with a single sync_state row", async () => {
+  it("is idempotent: running init twice stays at v6 with a single sync_state row", async () => {
     const db = createTestDb();
     await initDatabase(db);
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(5);
+    expect(await userVersion(db)).toBe(6);
     const count = await db.getFirstAsync<{ c: number }>(
       `SELECT COUNT(*) c FROM sync_state`
     );

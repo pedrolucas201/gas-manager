@@ -139,6 +139,15 @@ interface PulledExpense {
   server_received_at: string;
 }
 
+interface PulledStockSet {
+  id: string;
+  cylinder_type_id: string;
+  full_qty: number;
+  empty_qty: number;
+  client_created_at: string;
+  server_received_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Ponto de entrada público
 // ---------------------------------------------------------------------------
@@ -169,6 +178,8 @@ export async function applyEvent(db: SQLiteDatabase, event: PullEvent): Promise<
       return applyCylinderUpsert(db, event.data as PulledCylinderUpsert);
     case "expense":
       return applyExpense(db, event.data as PulledExpense);
+    case "stock_set":
+      return applyStockSet(db, event.data as PulledStockSet);
     default:
       // Kind desconhecido — ignorar silenciosamente para compatibilidade futura.
       return;
@@ -474,6 +485,31 @@ async function applyExpense(db: SQLiteDatabase, d: PulledExpense): Promise<void>
     `INSERT OR IGNORE INTO expenses (uuid, category, description, amount)
      VALUES (?, ?, ?, ?)`,
     [d.id, d.category, d.description ?? null, parseFloat(d.amount)]
+  );
+}
+
+async function applyStockSet(db: SQLiteDatabase, d: PulledStockSet): Promise<void> {
+  const cylinderTypeId = await resolveP13LocalId(db);
+
+  // Dedupe: se este evento já foi aplicado (inclusive pelo próprio dispositivo
+  // via updateInventory), não processa novamente.
+  const dedup = await db.runAsync(
+    `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+    [d.id]
+  );
+  if (dedup.changes === 0) return;
+
+  // LWW: só aplica se client_created_at é mais recente que o último set
+  // registrado. Garante que sets concorrentes convergem para o mais recente,
+  // independente da ordem de chegada dos eventos.
+  await db.runAsync(
+    `UPDATE inventory
+     SET full_qty    = ?,
+         empty_qty   = ?,
+         last_set_at = ?
+     WHERE cylinder_type_id = ?
+       AND (last_set_at IS NULL OR ? > last_set_at)`,
+    [d.full_qty, d.empty_qty, d.client_created_at, cylinderTypeId, d.client_created_at]
   );
 }
 

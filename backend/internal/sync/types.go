@@ -4,14 +4,21 @@ import "time"
 
 // PushEvent is one client event in a /sync/push batch. Kind selects the table.
 type PushEvent struct {
-	Kind            string           `json:"kind"` // sale|restock|stock_adjustment|debt_settlement|expense
+	Kind            string           `json:"kind"` // sale|restock|stock_adjustment|stock_set|debt_settlement|expense
 	ID              string           `json:"id"`   // client UUID
 	ClientCreatedAt time.Time        `json:"client_created_at"`
 	Sale            *SalePayload     `json:"sale,omitempty"`
 	Restock         *RestockPayload  `json:"restock,omitempty"`
 	StockAdjustment *StockAdjPayload `json:"stock_adjustment,omitempty"`
+	StockSet        *StockSetPayload `json:"stock_set,omitempty"`
 	DebtSettlement  *SettlePayload   `json:"debt_settlement,omitempty"`
 	Expense         *ExpensePayload  `json:"expense,omitempty"`
+}
+
+type StockSetPayload struct {
+	CylinderTypeID string `json:"cylinder_type_id"`
+	FullQty        int    `json:"full_qty"`
+	EmptyQty       int    `json:"empty_qty"`
 }
 
 type SalePayload struct {
