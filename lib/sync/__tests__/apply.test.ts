@@ -970,3 +970,56 @@ describe("applyEvent — kind desconhecido", () => {
     ).resolves.not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Testes: dedup de eventos criados localmente via applied_events
+// ---------------------------------------------------------------------------
+
+describe("applySettlement — dedup com applied_events (evento local)", () => {
+  it("não re-aplica balance se uuid já está em applied_events", async () => {
+    const db = await freshDb();
+    const custUuid = "ccccc000-0000-0000-0000-000000000001";
+    const settlementUuid = "dddd0000-0000-0000-0000-000000000001";
+    await seedCustomer(db, custUuid, "Local Settle", -200);
+
+    // Simula o que settleCustomerDebt faz: aplica balance + insere em applied_events
+    await db.runAsync(
+      `UPDATE customers SET balance = balance + 200 WHERE uuid = ?`,
+      [custUuid]
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+      [settlementUuid]
+    );
+
+    // Pull traz o mesmo evento — não deve re-aplicar
+    await applyEvent(
+      db,
+      makeSettlementEvent({ uuid: settlementUuid, customerUuid: custUuid, amount: "200" })
+    );
+
+    const c = await db.getFirstAsync<{ balance: number }>(
+      `SELECT balance FROM customers WHERE uuid = ?`, [custUuid]
+    );
+    // balance deve ser 0 (quitado uma vez), não +200 (re-aplicado)
+    expect(c?.balance).toBeCloseTo(0, 5);
+  });
+
+  it("aplica normalmente quando uuid não está em applied_events (evento de outro device)", async () => {
+    const db = await freshDb();
+    const custUuid = "ccccc000-0000-0000-0000-000000000002";
+    const settlementUuid = "dddd0000-0000-0000-0000-000000000002";
+    await seedCustomer(db, custUuid, "Remote Settle", -200);
+
+    // Nenhum applied_events pré-existente — deve aplicar normalmente
+    await applyEvent(
+      db,
+      makeSettlementEvent({ uuid: settlementUuid, customerUuid: custUuid, amount: "200" })
+    );
+
+    const c = await db.getFirstAsync<{ balance: number }>(
+      `SELECT balance FROM customers WHERE uuid = ?`, [custUuid]
+    );
+    expect(c?.balance).toBeCloseTo(0, 5);
+  });
+});
