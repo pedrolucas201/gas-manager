@@ -402,6 +402,19 @@ async function applySettlement(db: SQLiteDatabase, d: PulledSettlement): Promise
     `UPDATE customers SET balance = balance + ? WHERE id = ?`,
     [amount, customerId]
   );
+
+  const customer = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM customers WHERE id = ?`,
+    [customerId]
+  );
+
+  // Grava no log local (INSERT OR IGNORE para idempotência adicional).
+  await db.runAsync(
+    `INSERT OR IGNORE INTO debt_settlements
+       (uuid, customer_id, customer_name, amount, payment_method)
+     VALUES (?, ?, ?, ?, ?)`,
+    [d.id, customerId, customer?.name ?? "(sincronizando)", amount, d.payment_method]
+  );
 }
 
 async function applyCustomerUpsert(

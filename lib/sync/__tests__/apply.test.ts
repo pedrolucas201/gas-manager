@@ -649,6 +649,31 @@ describe("applyEvent — debt_settlement", () => {
     expect(bal).toBeCloseTo(-100, 5);
   });
 
+  it("grava log em debt_settlements com uuid e payment_method", async () => {
+    const db = await freshDb();
+    const custUuid = "cust-uuid-settle-log";
+    await seedCustomer(db, custUuid, "Log Test", -200);
+
+    await applyEvent(
+      db,
+      makeSettlementEvent({
+        uuid: "settle-uuid-log-001",
+        customerUuid: custUuid,
+        amount: "75.00",
+      })
+    );
+
+    const row = await db.getFirstAsync<{
+      uuid: string;
+      amount: number;
+      payment_method: string;
+    }>(`SELECT * FROM debt_settlements WHERE uuid = 'settle-uuid-log-001'`);
+
+    expect(row).toBeTruthy();
+    expect(row!.amount).toBeCloseTo(75, 5);
+    expect(row!.payment_method).toBe("pix");
+  });
+
   it("dedupe: mesmo uuid de quitação não aplica duas vezes", async () => {
     const db = await freshDb();
     const custUuid = "cust-uuid-settle-idem";

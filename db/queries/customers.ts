@@ -119,20 +119,27 @@ export async function settleCustomerDebt(
   db: SQLiteDatabase,
   id: number,
   amount: number,
-  paymentMethod = "pix"
+  paymentMethod: string = "pix"
 ) {
   const now = new Date().toISOString();
   const uuid = randomUUID();
 
   await db.withTransactionAsync(async () => {
+    const customer = await db.getFirstAsync<{ uuid: string; name: string }>(
+      `SELECT uuid, name FROM customers WHERE id = ?`,
+      [id]
+    );
+    if (!customer) throw new Error("Cliente não encontrado");
+
     await db.runAsync(
       `UPDATE customers SET balance = balance + ? WHERE id = ?`,
       [amount, id]
     );
 
-    const r = await db.getFirstAsync<{ uuid: string }>(
-      `SELECT uuid FROM customers WHERE id = ?`,
-      [id]
+    await db.runAsync(
+      `INSERT INTO debt_settlements (uuid, customer_id, customer_name, amount, payment_method)
+       VALUES (?, ?, ?, ?, ?)`,
+      [uuid, id, customer.name, amount, paymentMethod]
     );
 
     await enqueue(db, {
@@ -143,7 +150,7 @@ export async function settleCustomerDebt(
         id: uuid,
         client_created_at: now,
         debt_settlement: {
-          customer_id: r!.uuid,
+          customer_id: customer.uuid,
           amount: amount.toFixed(2),
           payment_method: paymentMethod,
         },

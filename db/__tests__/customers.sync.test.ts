@@ -97,6 +97,40 @@ describe("deleteCustomer", () => {
 });
 
 describe("settleCustomerDebt", () => {
+  it("grava log em debt_settlements com payment_method", async () => {
+    const db = await freshDb();
+    const id = await addCustomer(db, { name: "Pagador" });
+    await db.runAsync(`UPDATE customers SET balance = -300 WHERE id = ?`, [id]);
+
+    await settleCustomerDebt(db, id, 150, "cash");
+
+    const row = await db.getFirstAsync<{
+      uuid: string;
+      customer_name: string;
+      amount: number;
+      payment_method: string;
+    }>(`SELECT * FROM debt_settlements LIMIT 1`);
+
+    expect(row).toBeTruthy();
+    expect(row!.customer_name).toBe("Pagador");
+    expect(row!.amount).toBeCloseTo(150, 5);
+    expect(row!.payment_method).toBe("cash");
+    expect(row!.uuid).toHaveLength(36);
+  });
+
+  it("usa pix como método padrão se não especificado", async () => {
+    const db = await freshDb();
+    const id = await addCustomer(db, { name: "Padrão" });
+    await db.runAsync(`UPDATE customers SET balance = -100 WHERE id = ?`, [id]);
+
+    await settleCustomerDebt(db, id, 100);
+
+    const row = await db.getFirstAsync<{ payment_method: string }>(
+      `SELECT payment_method FROM debt_settlements LIMIT 1`
+    );
+    expect(row?.payment_method).toBe("pix");
+  });
+
   it("enfileira debt_settlement com customer_id (uuid) e amount string", async () => {
     const db = await freshDb();
     const id = await addCustomer(db, { name: "Fiado" });
