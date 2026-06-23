@@ -52,6 +52,16 @@ export interface Restock {
   cylinder_name?: string;
 }
 
+export interface DebtSettlement {
+  id: number;
+  uuid: string;
+  customer_id: number | null;
+  customer_name: string;
+  amount: number;
+  payment_method: string;
+  created_at: string;
+}
+
 export interface DashboardStats {
   today_revenue: number;
   today_sales: number;

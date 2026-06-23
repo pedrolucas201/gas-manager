@@ -20,17 +20,23 @@ async function tableExists(db: SQLiteDatabase, name: string): Promise<boolean> {
   return r !== null;
 }
 
-describe("schema migration to v3", () => {
-  it("brings a fresh database to version 3 with all expected tables and columns", async () => {
+describe("schema migration to v4", () => {
+  it("brings a fresh database to version 4 with all expected tables and columns", async () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(3);
+    expect(await userVersion(db)).toBe(4);
 
     // v3 additions
     expect(await tableExists(db, "applied_events")).toBe(true);
     expect(await columnNames(db, "cylinder_types")).toEqual(
       expect.arrayContaining(["updated_at"])
+    );
+
+    // v4 additions
+    expect(await tableExists(db, "debt_settlements")).toBe(true);
+    expect(await columnNames(db, "debt_settlements")).toEqual(
+      expect.arrayContaining(["uuid", "customer_id", "customer_name", "amount", "payment_method"])
     );
   });
 });
@@ -40,7 +46,7 @@ describe("schema migration to v2", () => {
     const db = createTestDb();
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(3);
+    expect(await userVersion(db)).toBe(4);
 
     expect(await columnNames(db, "customers")).toEqual(
       expect.arrayContaining(["uuid", "updated_at"])
@@ -68,12 +74,12 @@ describe("schema migration to v2", () => {
     expect(ct?.name).toBe("P13");
   });
 
-  it("is idempotent: running init twice stays at v2 with a single sync_state row", async () => {
+  it("is idempotent: running init twice stays at v4 with a single sync_state row", async () => {
     const db = createTestDb();
     await initDatabase(db);
     await initDatabase(db);
 
-    expect(await userVersion(db)).toBe(3);
+    expect(await userVersion(db)).toBe(4);
     const count = await db.getFirstAsync<{ c: number }>(
       `SELECT COUNT(*) c FROM sync_state`
     );

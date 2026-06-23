@@ -2,7 +2,7 @@
 // the native module, which can't load under the Node (better-sqlite3) test harness.
 import type { SQLiteDatabase } from "expo-sqlite";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // A random UUID-shaped id (8-4-4-4-12) built entirely in SQLite via randomblob,
 // so the SAME backfill SQL runs identically under expo-sqlite (app) and
@@ -153,6 +153,25 @@ export async function migrate(db: SQLiteDatabase) {
         );
 
         PRAGMA user_version = 3;
+      `);
+    });
+  }
+
+  if (current < 4) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS debt_settlements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uuid TEXT NOT NULL UNIQUE,
+          customer_id INTEGER,
+          customer_name TEXT NOT NULL,
+          amount REAL NOT NULL,
+          payment_method TEXT NOT NULL DEFAULT 'cash',
+          created_at TEXT DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+        );
+
+        PRAGMA user_version = 4;
       `);
     });
   }
