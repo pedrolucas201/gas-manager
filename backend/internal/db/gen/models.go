@@ -49,6 +49,18 @@ type DebtSettlement struct {
 	Sequence         int64
 }
 
+type Expense struct {
+	ID               pgtype.UUID
+	Category         string
+	Description      *string
+	Amount           pgtype.Numeric
+	PayloadHash      string
+	CreatedBy        string
+	ClientCreatedAt  pgtype.Timestamptz
+	ServerReceivedAt pgtype.Timestamptz
+	Sequence         int64
+}
+
 type Inventory struct {
 	ID             pgtype.UUID
 	CylinderTypeID pgtype.UUID

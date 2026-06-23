@@ -90,6 +90,22 @@ func (q *Queries) GetDebtSettlementByID(ctx context.Context, id pgtype.UUID) (Ge
 	return i, err
 }
 
+const getExpenseByID = `-- name: GetExpenseByID :one
+SELECT id, payload_hash FROM expenses WHERE id = $1
+`
+
+type GetExpenseByIDRow struct {
+	ID          pgtype.UUID
+	PayloadHash string
+}
+
+func (q *Queries) GetExpenseByID(ctx context.Context, id pgtype.UUID) (GetExpenseByIDRow, error) {
+	row := q.db.QueryRow(ctx, getExpenseByID, id)
+	var i GetExpenseByIDRow
+	err := row.Scan(&i.ID, &i.PayloadHash)
+	return i, err
+}
+
 const getRestockByID = `-- name: GetRestockByID :one
 SELECT id, payload_hash FROM restocks WHERE id = $1
 `
@@ -171,6 +187,42 @@ func (q *Queries) InsertDebtSettlement(ctx context.Context, arg InsertDebtSettle
 		arg.ClientCreatedAt,
 	)
 	var i InsertDebtSettlementRow
+	err := row.Scan(&i.Sequence, &i.ServerReceivedAt)
+	return i, err
+}
+
+const insertExpense = `-- name: InsertExpense :one
+INSERT INTO expenses (id, category, description, amount, payload_hash, created_by, client_created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING sequence, server_received_at
+`
+
+type InsertExpenseParams struct {
+	ID              pgtype.UUID
+	Category        string
+	Description     *string
+	Amount          pgtype.Numeric
+	PayloadHash     string
+	CreatedBy       string
+	ClientCreatedAt pgtype.Timestamptz
+}
+
+type InsertExpenseRow struct {
+	Sequence         int64
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertExpense(ctx context.Context, arg InsertExpenseParams) (InsertExpenseRow, error) {
+	row := q.db.QueryRow(ctx, insertExpense,
+		arg.ID,
+		arg.Category,
+		arg.Description,
+		arg.Amount,
+		arg.PayloadHash,
+		arg.CreatedBy,
+		arg.ClientCreatedAt,
+	)
+	var i InsertExpenseRow
 	err := row.Scan(&i.Sequence, &i.ServerReceivedAt)
 	return i, err
 }
@@ -357,6 +409,52 @@ func (q *Queries) PullDebtSettlements(ctx context.Context, arg PullDebtSettlemen
 			&i.CustomerID,
 			&i.Amount,
 			&i.PaymentMethod,
+			&i.ServerReceivedAt,
+			&i.Sequence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pullExpenses = `-- name: PullExpenses :many
+SELECT id, category, description, amount, server_received_at, sequence
+FROM expenses WHERE sequence > $1 ORDER BY sequence LIMIT $2
+`
+
+type PullExpensesParams struct {
+	Sequence int64
+	Limit    int32
+}
+
+type PullExpensesRow struct {
+	ID               pgtype.UUID
+	Category         string
+	Description      *string
+	Amount           pgtype.Numeric
+	ServerReceivedAt pgtype.Timestamptz
+	Sequence         int64
+}
+
+func (q *Queries) PullExpenses(ctx context.Context, arg PullExpensesParams) ([]PullExpensesRow, error) {
+	rows, err := q.db.Query(ctx, pullExpenses, arg.Sequence, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PullExpensesRow
+	for rows.Next() {
+		var i PullExpensesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Category,
+			&i.Description,
+			&i.Amount,
 			&i.ServerReceivedAt,
 			&i.Sequence,
 		); err != nil {

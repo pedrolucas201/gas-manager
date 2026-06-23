@@ -92,3 +92,15 @@ FROM sale_voids
 WHERE id > $1
 ORDER BY id
 LIMIT $2;
+
+-- name: GetExpenseByID :one
+SELECT id, payload_hash FROM expenses WHERE id = $1;
+
+-- name: InsertExpense :one
+INSERT INTO expenses (id, category, description, amount, payload_hash, created_by, client_created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING sequence, server_received_at;
+
+-- name: PullExpenses :many
+SELECT id, category, description, amount, server_received_at, sequence
+FROM expenses WHERE sequence > $1 ORDER BY sequence LIMIT $2;
