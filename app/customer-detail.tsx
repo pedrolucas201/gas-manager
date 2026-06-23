@@ -133,22 +133,24 @@ export default function CustomerDetailScreen() {
               </View>
             </View>
 
-            {hasDebt && (
-              <TouchableOpacity
-                className="mt-3 bg-red-500 rounded-xl py-3 flex-row items-center justify-center gap-2"
-                onPress={() =>
-                  router.push({
-                    pathname: "/settle-debt",
-                    params: { id: customer.id, name: customer.name, balance: customer.balance },
-                  })
-                }
-              >
-                <Ionicons name="cash" size={18} color="white" />
-                <Text className="text-white font-bold">
-                  Quitar {formatCurrency(Math.abs(customer.balance))}
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              className={`mt-3 rounded-xl py-3 flex-row items-center justify-center gap-2 ${
+                hasDebt ? "bg-red-500" : "bg-orange-400"
+              }`}
+              onPress={() =>
+                router.push({
+                  pathname: "/settle-debt",
+                  params: { id: customer.id, name: customer.name, balance: customer.balance },
+                })
+              }
+            >
+              <Ionicons name="cash" size={18} color="white" />
+              <Text className="text-white font-bold">
+                {hasDebt
+                  ? `Quitar ${formatCurrency(Math.abs(customer.balance))}`
+                  : "Receber Vale"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <Text className="px-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">

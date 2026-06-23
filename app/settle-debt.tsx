@@ -21,9 +21,11 @@ const SETTLE_METHODS: { key: SettlePaymentMethod; label: string; icon: string }[
 export default function SettleDebtScreen() {
   const db = useSQLiteContext();
   const { id, name, balance } = useLocalSearchParams<{ id: string; name: string; balance: string }>();
-  const debt = Math.abs(parseFloat(balance ?? "0"));
+  const balanceNum = parseFloat(balance ?? "0");
+  const debt = balanceNum < 0 ? Math.abs(balanceNum) : 0;
+  const hasDebt = debt > 0;
 
-  const [amount, setAmount] = useState(String(debt));
+  const [amount, setAmount] = useState(hasDebt ? String(debt) : "");
   const [paymentMethod, setPaymentMethod] = useState<SettlePaymentMethod>("cash");
   const [saving, setSaving] = useState(false);
   const bumpCustomers = useAppStore((s) => s.bumpCustomers);
@@ -31,7 +33,10 @@ export default function SettleDebtScreen() {
   const handleSettle = async () => {
     const value = parseFloat(amount);
     if (!value || value <= 0) return Alert.alert("Erro", "Valor inválido");
-    if (value > debt) return Alert.alert("Erro", `O valor não pode ser maior que a dívida (${formatCurrency(debt)})`);
+    // Só bloqueia exceder dívida quando há dívida registrada no app
+    if (hasDebt && value > debt) {
+      return Alert.alert("Erro", `O valor não pode ser maior que a dívida (${formatCurrency(debt)})`);
+    }
 
     setSaving(true);
     try {
@@ -48,10 +53,20 @@ export default function SettleDebtScreen() {
   return (
     <ScrollView className="flex-1 bg-gray-50 dark:bg-gray-950" keyboardShouldPersistTaps="handled">
       <View className="px-4 pt-4 gap-4">
-        <View className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl p-4">
-          <Text className="text-sm text-red-600 dark:text-red-400 font-medium">{name}</Text>
-          <Text className="text-2xl font-bold text-red-700 dark:text-red-300 mt-1">{formatCurrency(debt)}</Text>
-          <Text className="text-xs text-red-400 mt-0.5">Dívida total</Text>
+        {/* Info card */}
+        <View className={`border rounded-2xl p-4 ${hasDebt ? "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800" : "bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800"}`}>
+          <Text className={`text-sm font-medium ${hasDebt ? "text-red-600 dark:text-red-400" : "text-orange-600 dark:text-orange-400"}`}>{name}</Text>
+          {hasDebt ? (
+            <>
+              <Text className="text-2xl font-bold text-red-700 dark:text-red-300 mt-1">{formatCurrency(debt)}</Text>
+              <Text className="text-xs text-red-400 mt-0.5">Dívida total no app</Text>
+            </>
+          ) : (
+            <>
+              <Text className="text-base font-semibold text-orange-700 dark:text-orange-300 mt-1">Sem dívida registrada no app</Text>
+              <Text className="text-xs text-orange-400 mt-0.5">Recebimento de dívida anterior ou avulso</Text>
+            </>
+          )}
         </View>
 
         <View>
@@ -62,23 +77,27 @@ export default function SettleDebtScreen() {
             value={amount}
             onChangeText={setAmount}
             autoFocus
+            placeholder="0,00"
+            placeholderTextColor="#9ca3af"
           />
         </View>
 
-        <View className="flex-row gap-2">
-          {[debt * 0.5, debt].map((preset, idx) => (
-            <TouchableOpacity
-              key={idx}
-              className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 items-center"
-              onPress={() => setAmount(String(preset.toFixed(2)))}
-            >
-              <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                {idx === 0 ? "Metade" : "Total"}
-              </Text>
-              <Text className="text-xs text-gray-400 dark:text-gray-500">{formatCurrency(preset)}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {hasDebt && (
+          <View className="flex-row gap-2">
+            {[debt * 0.5, debt].map((preset, idx) => (
+              <TouchableOpacity
+                key={idx}
+                className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 items-center"
+                onPress={() => setAmount(String(preset.toFixed(2)))}
+              >
+                <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  {idx === 0 ? "Metade" : "Total"}
+                </Text>
+                <Text className="text-xs text-gray-400 dark:text-gray-500">{formatCurrency(preset)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <View>
           <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
