@@ -9,6 +9,7 @@ type Config struct {
 	DatabaseURL       string
 	Port              string
 	FirebaseProjectID string
+	CORSOrigin        string
 }
 
 func Load() (Config, error) {
@@ -16,6 +17,7 @@ func Load() (Config, error) {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		Port:              os.Getenv("PORT"),
 		FirebaseProjectID: os.Getenv("FIREBASE_PROJECT_ID"),
+		CORSOrigin:        os.Getenv("CORS_ORIGIN"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -25,6 +27,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
+	}
+	if cfg.CORSOrigin == "" {
+		cfg.CORSOrigin = "*"
 	}
 	return cfg, nil
 }
