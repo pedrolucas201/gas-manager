@@ -14,6 +14,8 @@ import (
 	"github.com/pedrogomesdev/gas-manager-backend/internal/auth"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/catalog"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/config"
+	"github.com/pedrogomesdev/gas-manager-backend/internal/httpx"
+	"github.com/pedrogomesdev/gas-manager-backend/internal/reports"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/sync"
 )
 
@@ -48,7 +50,9 @@ func run() error {
 		sync.NewService(pool),
 		catalog.NewService(pool),
 		alerts.NewService(pool),
+		reports.NewService(pool),
 		authMW,
+		httpx.CORS(cfg.CORSOrigin),
 		pool.Ping,
 	)
 
@@ -60,19 +64,18 @@ func newRouter(
 	syncSvc *sync.Service,
 	catalogSvc *catalog.Service,
 	alertsSvc *alerts.Service,
+	reportsSvc *reports.Service,
 	authMW func(http.Handler) http.Handler,
+	corsMW func(http.Handler) http.Handler,
 	ready func(context.Context) error,
 ) http.Handler {
 	r := chi.NewRouter()
+	r.Use(corsMW)
 
-	// Liveness: process is up. (Note: the *.run.app Google Frontend swallows
-	// the literal /healthz path, so this is reachable in tests/liveness probes
-	// but not over the public URL — use /readyz for external checks.)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Readiness: process is up AND the database is reachable.
 	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
@@ -94,6 +97,11 @@ func newRouter(
 		r.Put("/catalog/cylinder-types/{id}", catalogSvc.HandleUpdateCylinderType)
 		r.Get("/alerts/negative-stock", alertsSvc.HandleNegativeStock)
 		r.Get("/alerts/over-limit-balance", alertsSvc.HandleOverLimitBalance)
+		r.Get("/reports/summary", reportsSvc.HandleSummary)
+		r.Get("/reports/sales", reportsSvc.HandleSales)
+		r.Get("/reports/expenses", reportsSvc.HandleExpenses)
+		r.Get("/reports/debtors", reportsSvc.HandleDebtors)
+		r.Get("/inventory", reportsSvc.HandleInventory)
 	})
 
 	return r

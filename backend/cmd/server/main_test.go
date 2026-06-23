@@ -10,6 +10,7 @@ import (
 
 	"github.com/pedrogomesdev/gas-manager-backend/internal/alerts"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/catalog"
+	"github.com/pedrogomesdev/gas-manager-backend/internal/reports"
 	"github.com/pedrogomesdev/gas-manager-backend/internal/sync"
 )
 
@@ -26,12 +27,16 @@ func denyAuth(http.Handler) http.Handler {
 
 func okReady(context.Context) error { return nil }
 
+func noopCORS(next http.Handler) http.Handler { return next }
+
 func newTestRouter(ready func(context.Context) error) http.Handler {
 	return newRouter(
 		sync.NewService(nil),
 		catalog.NewService(nil),
 		alerts.NewService(nil),
+		reports.NewService(nil),
 		passthroughAuth,
+		noopCORS,
 		ready,
 	)
 }
@@ -73,7 +78,7 @@ func TestReadyz_DBDown(t *testing.T) {
 func TestProbes_ArePublic(t *testing.T) {
 	router := newRouter(
 		sync.NewService(nil), catalog.NewService(nil), alerts.NewService(nil),
-		denyAuth, okReady,
+		reports.NewService(nil), denyAuth, noopCORS, okReady,
 	)
 	for _, p := range []string{"/healthz", "/readyz"} {
 		rec := httptest.NewRecorder()
