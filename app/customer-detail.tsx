@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getCustomerById, getCustomerSales, deleteCustomer } from "@/db/queries/customers";
 import { Customer } from "@/types";
 import { useAppStore } from "@/store";
+import { triggerManualSync } from "@/lib/sync/engine";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -50,6 +51,7 @@ export default function CustomerDetailScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    await triggerManualSync();
     await load();
     setRefreshing(false);
   }, [load]);

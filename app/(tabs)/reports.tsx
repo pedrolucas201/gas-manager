@@ -8,6 +8,7 @@ import { getSettlements } from "@/db/queries/settlements";
 import { getExpenses } from "@/db/queries/expenses";
 import { DashboardStats, DebtSettlement, Expense } from "@/types";
 import { useAppStore } from "@/store";
+import { triggerManualSync } from "@/lib/sync/engine";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -74,6 +75,7 @@ export default function ReportsScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    await triggerManualSync();
     await load();
     setRefreshing(false);
   }, [load]);

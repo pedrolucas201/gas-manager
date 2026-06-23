@@ -1,7 +1,7 @@
 import { initDatabase } from "@/db/database";
 import { createTestDb } from "@/db/__tests__/helpers/testdb";
 import { enqueue } from "@/lib/sync/outbox";
-import { SyncEngine } from "@/lib/sync/engine";
+import { SyncEngine, getSyncEngine, triggerManualSync } from "@/lib/sync/engine";
 import type { SQLiteDatabase } from "expo-sqlite";
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,80 @@ describe("SyncEngine.pushOnce", () => {
     expect(row?.status).toBe("done");
   });
 
+  it("envia customer_upsert ANTES dos facts (FK do fiado)", async () => {
+    const db = await freshDb();
+    const order: string[] = [];
+    mockUpsertCustomer.mockImplementation(async () => { order.push("catalog"); });
+    mockPushEvents.mockImplementation(async () => {
+      order.push("facts");
+      return [{ id: "sale-fiado-1", status: "applied" }];
+    });
+
+    const custPayload = { id: "cust-uuid-9", name: "Novo", phone: null, address: null, credit_limit: null, updated_at: "2026-06-23T10:00:00Z" };
+    await enqueue(db, {
+      event_uuid: "cu-uuid-9",
+      kind: "customer_upsert",
+      payload: JSON.stringify(custPayload),
+      client_created_at: new Date().toISOString(),
+    });
+    await enqueue(db, {
+      event_uuid: "sale-fiado-1",
+      kind: "sale",
+      payload: JSON.stringify({
+        kind: "sale", id: "sale-fiado-1", client_created_at: new Date().toISOString(),
+        sale: { cylinder_type_id: "11111111-1111-1111-1111-111111111111", customer_id: "cust-uuid-9", quantity: 1, unit_price: "120.00", cost_price: "90.00", total: "120.00", payment_method: "fiado", is_exchange: false },
+      }),
+      client_created_at: new Date().toISOString(),
+    });
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(order).toEqual(["catalog", "facts"]);
+  });
+
+  it("envia void_sale DEPOIS dos facts (venda existe antes de anular)", async () => {
+    const db = await freshDb();
+    const order: string[] = [];
+    mockPushEvents.mockImplementation(async () => {
+      order.push("facts");
+      return [{ id: "sale-uuid-push-1", status: "applied" }];
+    });
+    mockVoidSale.mockImplementation(async () => { order.push("void"); });
+
+    await enqueueFact(db);
+    await enqueue(db, {
+      event_uuid: "void-uuid-2",
+      kind: "void_sale",
+      payload: JSON.stringify({ id: "sale-ref" }),
+      client_created_at: new Date().toISOString(),
+    });
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(order).toEqual(["facts", "void"]);
+  });
+
+  it("não envia facts se o catálogo falhar com NetworkError", async () => {
+    const { NetworkError } = jest.requireMock("@/lib/api");
+    mockUpsertCustomer.mockRejectedValue(new NetworkError("timeout"));
+    const db = await freshDb();
+    await enqueue(db, {
+      event_uuid: "cu-uuid-net",
+      kind: "customer_upsert",
+      payload: JSON.stringify({ id: "c1", name: "X", phone: null, address: null, credit_limit: null, updated_at: "2026-06-23T10:00:00Z" }),
+      client_created_at: new Date().toISOString(),
+    });
+    await enqueueFact(db);
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(mockPushEvents).not.toHaveBeenCalled();
+    const sale = await db.getFirstAsync<{ status: string }>(
+      `SELECT status FROM sync_outbox WHERE event_uuid = 'sale-uuid-push-1'`
+    );
+    expect(sale?.status).toBe("pending");
+  });
+
   it("AuthError no pushEvents chama signOutUser e para", async () => {
     const { AuthError } = jest.requireMock("@/lib/api");
     mockPushEvents.mockRejectedValue(new AuthError("not auth"));
@@ -180,5 +254,26 @@ describe("SyncEngine.pushOnce", () => {
       `SELECT status FROM sync_outbox WHERE event_uuid = 'sale-uuid-push-1'`
     );
     expect(row?.status).toBe("pending");
+  });
+});
+
+describe("SyncEngine — engine ativo (pull-to-refresh)", () => {
+  it("start() registra o engine ativo; stop() limpa", async () => {
+    const db = await freshDb();
+    const engine = new SyncEngine(db);
+    expect(getSyncEngine()).toBeNull();
+    engine.start();
+    expect(getSyncEngine()).toBe(engine);
+    engine.stop();
+    expect(getSyncEngine()).toBeNull();
+  });
+
+  it("triggerManualSync é no-op seguro quando não há engine ativo", async () => {
+    // Garante que nenhum engine está ativo.
+    const db = await freshDb();
+    const engine = new SyncEngine(db);
+    engine.start();
+    engine.stop();
+    await expect(triggerManualSync()).resolves.toBeUndefined();
   });
 });

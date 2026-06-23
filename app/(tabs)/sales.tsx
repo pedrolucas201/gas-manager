@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getSales, voidSale } from "@/db/queries/sales";
 import { Sale, PaymentMethod } from "@/types";
 import { useAppStore } from "@/store";
+import { triggerManualSync } from "@/lib/sync/engine";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -85,6 +86,7 @@ export default function SalesScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    await triggerManualSync();
     await load();
     setRefreshing(false);
   }, [load]);

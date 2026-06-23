@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getInventory, getCylinderTypes, updateInventory, updateCylinderPrice, getRestocks } from "@/db/queries/inventory";
 import { Inventory, CylinderType, Restock } from "@/types";
 import { useAppStore } from "@/store";
+import { triggerManualSync } from "@/lib/sync/engine";
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -42,6 +43,7 @@ export default function InventoryScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    await triggerManualSync();
     await load();
     setRefreshing(false);
   }, [load]);

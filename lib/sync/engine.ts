@@ -29,12 +29,35 @@ const FACT_KINDS = new Set([
   "expense",
 ]);
 
+// Catalog kinds must be pushed BEFORE facts: a fiado sale references a customer
+// via FK on the server, so the customer must exist before the sale arrives.
+const CATALOG_KINDS = new Set([
+  "customer_upsert",
+  "customer_delete",
+  "cylinder_upsert",
+]);
+
 async function applyEventSafe(db: SQLiteDatabase, e: unknown): Promise<void> {
   try {
     await applyEvent(db, e as Parameters<typeof applyEvent>[1]);
   } catch (err) {
     console.warn("[SyncEngine] applyEvent falhou:", err);
   }
+}
+
+// Instância ativa do engine, registrada em start()/stop(). Permite que as telas
+// disparem um sync manual (pull-to-refresh) sem precisar passar o engine via
+// props/context — ele vive no AuthGate (_layout.tsx).
+let activeEngine: SyncEngine | null = null;
+
+/** Retorna o engine ativo (ou null se o usuário não está logado). */
+export function getSyncEngine(): SyncEngine | null {
+  return activeEngine;
+}
+
+/** Dispara um sync manual se houver engine ativo. Seguro de chamar sempre. */
+export async function triggerManualSync(): Promise<void> {
+  await activeEngine?.syncNow();
 }
 
 export class SyncEngine {
@@ -50,43 +73,65 @@ export class SyncEngine {
     const events = await pendingEvents(this.db);
     if (events.length === 0) return;
 
+    // Order matters: catalog (customer/cylinder) → facts (sale/restock/...) →
+    // voids. The customer must exist on the server before a fiado sale (FK), and
+    // a void must arrive after the sale it cancels.
+    const catalog = events.filter((e) => CATALOG_KINDS.has(e.kind));
     const facts = events.filter((e) => FACT_KINDS.has(e.kind));
-    const others = events.filter((e) => !FACT_KINDS.has(e.kind));
+    const voids = events.filter((e) => e.kind === "void_sale");
 
-    if (facts.length > 0) {
-      try {
-        const payloads = facts.map((e) => JSON.parse(e.payload) as PushEvent);
-        const results = await pushEvents(payloads);
-        for (const r of results) {
-          if (r.status === "applied" || r.status === "duplicate") {
-            await markDone(this.db, r.id);
-          } else {
-            await markError(this.db, r.id, r.error ?? "server_error");
-          }
+    // 1. Catalog first.
+    if (await this._pushIndividual(catalog)) return;
+    // 2. Facts in a single batch.
+    if (await this._pushFacts(facts)) return;
+    // 3. Voids last.
+    if (await this._pushIndividual(voids)) return;
+
+    const count = await getOutboxCount(this.db);
+    useSyncStore.getState().setPendingCount(count);
+  }
+
+  // _pushFacts sends fact events in one batch. Returns true if the caller should
+  // abort the rest of the push (auth/network failure).
+  private async _pushFacts(facts: PendingEvent[]): Promise<boolean> {
+    if (facts.length === 0) return false;
+    try {
+      const payloads = facts.map((e) => JSON.parse(e.payload) as PushEvent);
+      const results = await pushEvents(payloads);
+      for (const r of results) {
+        if (r.status === "applied" || r.status === "duplicate") {
+          await markDone(this.db, r.id);
+        } else {
+          await markError(this.db, r.id, r.error ?? "server_error");
         }
-      } catch (e) {
-        if (e instanceof AuthError) {
-          await signOutUser();
-          return;
-        }
-        if (e instanceof NetworkError) {
-          return; // retry na próxima reconexão
-        }
-        throw e;
       }
+    } catch (e) {
+      if (e instanceof AuthError) {
+        await signOutUser();
+        return true;
+      }
+      if (e instanceof NetworkError) {
+        return true; // retry na próxima reconexão
+      }
+      throw e;
     }
+    return false;
+  }
 
-    for (const event of others) {
+  // _pushIndividual sends catalog/void events one by one through their own
+  // endpoints. Returns true if the caller should abort (auth/network failure).
+  private async _pushIndividual(list: PendingEvent[]): Promise<boolean> {
+    for (const event of list) {
       try {
         await this._pushCatalogEvent(event);
         await markDone(this.db, event.event_uuid);
       } catch (e) {
         if (e instanceof AuthError) {
           await signOutUser();
-          return;
+          return true;
         }
         if (e instanceof NetworkError) {
-          return;
+          return true;
         }
         await markError(
           this.db,
@@ -95,9 +140,7 @@ export class SyncEngine {
         );
       }
     }
-
-    const count = await getOutboxCount(this.db);
-    useSyncStore.getState().setPendingCount(count);
+    return false;
   }
 
   private async _pushCatalogEvent(event: PendingEvent): Promise<void> {
@@ -180,6 +223,7 @@ export class SyncEngine {
 
   start(): void {
     this._stopped = false;
+    activeEngine = this;
     this.syncNow();
     this._subscribeToNetwork();
     this._pollTimer = setInterval(() => this.syncNow(), 60_000);
@@ -187,6 +231,7 @@ export class SyncEngine {
 
   stop(): void {
     this._stopped = true;
+    if (activeEngine === this) activeEngine = null;
     clearTimeout(this._retryTimer);
     this._retryTimer = undefined;
     clearInterval(this._pollTimer);
