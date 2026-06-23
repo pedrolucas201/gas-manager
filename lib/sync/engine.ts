@@ -40,6 +40,7 @@ export class SyncEngine {
   private _stopped = false;
   private _syncing = false;
   private _retryTimer?: ReturnType<typeof setTimeout>;
+  private _pollTimer?: ReturnType<typeof setInterval>;
   private _unsubscribe?: () => void;
 
   constructor(private db: SQLiteDatabase) {}
@@ -180,12 +181,15 @@ export class SyncEngine {
     this._stopped = false;
     this.syncNow();
     this._subscribeToNetwork();
+    this._pollTimer = setInterval(() => this.syncNow(), 60_000);
   }
 
   stop(): void {
     this._stopped = true;
     clearTimeout(this._retryTimer);
     this._retryTimer = undefined;
+    clearInterval(this._pollTimer);
+    this._pollTimer = undefined;
     this._unsubscribe?.();
     this._unsubscribe = undefined;
   }
