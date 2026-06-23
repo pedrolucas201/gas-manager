@@ -89,21 +89,21 @@ export default function ReportsScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-gray-50 dark:bg-gray-950"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
     >
       <View className="px-4 pt-4 pb-3">
-        <Text className="text-lg font-bold text-gray-900 mb-3">Relatórios</Text>
+        <Text className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-3">Financeiro</Text>
 
         {/* Period selector */}
-        <View className="bg-gray-200 rounded-xl p-1 flex-row mb-4">
+        <View className="bg-gray-200 dark:bg-gray-800 rounded-xl p-1 flex-row mb-4">
           {(["today", "week", "month"] as Period[]).map((p) => (
             <TouchableOpacity
               key={p}
-              className={`flex-1 py-2 rounded-lg items-center ${period === p ? "bg-white shadow" : ""}`}
+              className={`flex-1 py-2 rounded-lg items-center ${period === p ? "bg-white dark:bg-gray-700 shadow" : ""}`}
               onPress={() => setPeriod(p)}
             >
-              <Text className={`text-sm font-semibold ${period === p ? "text-gray-900" : "text-gray-500"}`}>
+              <Text className={`text-sm font-semibold ${period === p ? "text-gray-900 dark:text-gray-50" : "text-gray-500 dark:text-gray-400"}`}>
                 {periodLabels[p]}
               </Text>
             </TouchableOpacity>
@@ -119,15 +119,15 @@ export default function ReportsScreen() {
 
         {rows.length > 0 && (
           <View className="flex-row gap-3 mb-4">
-            <View className="flex-1 bg-white rounded-2xl border border-gray-100 p-4">
-              <Text className="text-xs text-gray-500 font-medium mb-1">Lucro</Text>
-              <Text className={`text-xl font-bold ${totalProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
+            <View className="flex-1 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+              <Text className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Lucro</Text>
+              <Text className={`text-xl font-bold ${totalProfit >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {formatCurrency(totalProfit)}
               </Text>
             </View>
-            <View className="flex-1 bg-white rounded-2xl border border-gray-100 p-4">
-              <Text className="text-xs text-gray-500 font-medium mb-1">Margem</Text>
-              <Text className={`text-xl font-bold ${margin >= 0 ? "text-green-700" : "text-red-600"}`}>
+            <View className="flex-1 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+              <Text className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Margem</Text>
+              <Text className={`text-xl font-bold ${margin >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {margin.toFixed(1)}%
               </Text>
             </View>
@@ -137,15 +137,15 @@ export default function ReportsScreen() {
         {/* By payment method */}
         {Object.keys(paymentTotals).length > 0 && (
           <>
-            <Text className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Por Pagamento</Text>
-            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">
+            <Text className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Por Pagamento</Text>
+            <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden mb-4">
               {Object.entries(paymentTotals).map(([method, total], idx, arr) => (
                 <View
                   key={method}
-                  className={`px-4 py-3 flex-row items-center justify-between ${idx < arr.length - 1 ? "border-b border-gray-100" : ""}`}
+                  className={`px-4 py-3 flex-row items-center justify-between ${idx < arr.length - 1 ? "border-b border-gray-100 dark:border-gray-800" : ""}`}
                 >
-                  <Text className="text-gray-700 font-medium">{paymentLabels[method] ?? method}</Text>
-                  <Text className="font-bold text-gray-900">{formatCurrency(total)}</Text>
+                  <Text className="text-gray-700 dark:text-gray-300 font-medium">{paymentLabels[method] ?? method}</Text>
+                  <Text className="font-bold text-gray-900 dark:text-gray-50">{formatCurrency(total)}</Text>
                 </View>
               ))}
             </View>
@@ -155,8 +155,8 @@ export default function ReportsScreen() {
         {/* By cylinder */}
         {rows.length > 0 && (
           <>
-            <Text className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Por Botijão</Text>
-            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">
+            <Text className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Por Botijão</Text>
+            <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden mb-4">
               {Object.entries(
                 rows.reduce((acc: Record<string, { qty: number; revenue: number; profit: number }>, r: any) => {
                   acc[r.cylinder_name] = acc[r.cylinder_name] ?? { qty: 0, revenue: 0, profit: 0 };
@@ -168,13 +168,13 @@ export default function ReportsScreen() {
               ).map(([name, { qty, revenue, profit }], idx, arr) => (
                 <View
                   key={name}
-                  className={`px-4 py-3 flex-row items-center justify-between ${idx < arr.length - 1 ? "border-b border-gray-100" : ""}`}
+                  className={`px-4 py-3 flex-row items-center justify-between ${idx < arr.length - 1 ? "border-b border-gray-100 dark:border-gray-800" : ""}`}
                 >
                   <View>
-                    <Text className="text-gray-700 font-medium">{name}</Text>
-                    <Text className="text-xs text-gray-400">{qty} un · lucro {formatCurrency(profit)}</Text>
+                    <Text className="text-gray-700 dark:text-gray-300 font-medium">{name}</Text>
+                    <Text className="text-xs text-gray-400 dark:text-gray-500">{qty} un · lucro {formatCurrency(profit)}</Text>
                   </View>
-                  <Text className="font-bold text-gray-900">{formatCurrency(revenue)}</Text>
+                  <Text className="font-bold text-gray-900 dark:text-gray-50">{formatCurrency(revenue)}</Text>
                 </View>
               ))}
             </View>
@@ -184,7 +184,7 @@ export default function ReportsScreen() {
         {rows.length === 0 && (
           <View className="items-center py-12">
             <Ionicons name="bar-chart-outline" size={48} color="#d1d5db" />
-            <Text className="text-gray-400 mt-3 font-medium">Nenhuma venda no período</Text>
+            <Text className="text-gray-400 dark:text-gray-500 mt-3 font-medium">Nenhuma venda no período</Text>
           </View>
         )}
       </View>

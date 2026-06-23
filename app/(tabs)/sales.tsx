@@ -24,36 +24,38 @@ const paymentLabels: Record<PaymentMethod, string> = {
 };
 
 const paymentColors: Record<PaymentMethod, string> = {
-  cash: "bg-green-100 text-green-700",
-  pix: "bg-blue-100 text-blue-700",
-  card: "bg-purple-100 text-purple-700",
-  fiado: "bg-red-100 text-red-700",
+  cash: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+  pix: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  card: "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300",
+  fiado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 function SaleCard({ item, onDelete }: { item: Sale; onDelete: (id: number) => void }) {
   const colors = paymentColors[item.payment_method];
-  const [bg, txt] = colors.split(" ");
+  const parts = colors.split(" ");
+  const bg = parts.slice(0, 2).join(" ");
+  const txt = parts.slice(2).join(" ");
   return (
-    <View className="bg-white mx-4 mb-2 rounded-xl p-4 border border-gray-100">
+    <View className="bg-white dark:bg-gray-900 mx-4 mb-2 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
       <View className="flex-row items-start justify-between mb-1">
         <View className="flex-1">
-          <Text className="font-bold text-gray-900">
+          <Text className="font-bold text-gray-900 dark:text-gray-50">
             {item.quantity}x {item.cylinder_name}
             {item.is_exchange ? " (troca)" : ""}
           </Text>
           {item.customer_name && (
-            <Text className="text-xs text-gray-500">{item.customer_name}</Text>
+            <Text className="text-xs text-gray-500 dark:text-gray-400">{item.customer_name}</Text>
           )}
         </View>
         <View className="flex-row items-center gap-3">
-          <Text className="font-bold text-gray-900 text-base">{formatCurrency(item.total)}</Text>
+          <Text className="font-bold text-gray-900 dark:text-gray-50 text-base">{formatCurrency(item.total)}</Text>
           <TouchableOpacity onPress={() => onDelete(item.id)} className="p-1">
             <Ionicons name="trash-outline" size={16} color="#ef4444" />
           </TouchableOpacity>
         </View>
       </View>
       <View className="flex-row items-center justify-between mt-2">
-        <Text className="text-xs text-gray-400">{formatDate(item.created_at)}</Text>
+        <Text className="text-xs text-gray-400 dark:text-gray-500">{formatDate(item.created_at)}</Text>
         <View className={`rounded-full px-2 py-0.5 ${bg}`}>
           <Text className={`text-xs font-semibold ${txt}`}>{paymentLabels[item.payment_method]}</Text>
         </View>
@@ -105,7 +107,7 @@ export default function SalesScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-gray-50 dark:bg-gray-950">
       <FlatList
         data={sales}
         keyExtractor={(item) => String(item.id)}
@@ -113,14 +115,14 @@ export default function SalesScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">
-            <Text className="text-lg font-bold text-gray-900">Últimas Vendas</Text>
+            <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">Últimas Vendas</Text>
           </View>
         }
         ListEmptyComponent={
           <View className="items-center py-16">
             <Ionicons name="cart-outline" size={48} color="#d1d5db" />
-            <Text className="text-gray-400 mt-3 font-medium">Nenhuma venda registrada</Text>
-            <Text className="text-gray-300 text-sm">Toque no botão abaixo para adicionar</Text>
+            <Text className="text-gray-400 dark:text-gray-500 mt-3 font-medium">Nenhuma venda registrada</Text>
+            <Text className="text-gray-300 dark:text-gray-600 text-sm">Toque no botão abaixo para adicionar</Text>
           </View>
         }
         contentContainerStyle={{ paddingBottom: 100 }}

@@ -83,11 +83,11 @@ export default function InventoryScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-gray-50 dark:bg-gray-950"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
     >
       <View className="px-4 pt-4 pb-2 flex-row items-center justify-between">
-        <Text className="text-lg font-bold text-gray-900">Estoque</Text>
+        <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">Estoque</Text>
         <TouchableOpacity
           className="bg-primary-500 rounded-xl px-4 py-2 flex-row items-center gap-2"
           onPress={() => router.push("/restock-form")}
@@ -105,14 +105,14 @@ export default function InventoryScreen() {
         const isEditingPrc = editingPrice === item.cylinder_type_id;
 
         return (
-          <View key={item.id} className="mx-4 mb-3 bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <View key={item.id} className="mx-4 mb-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
             <View className={`h-1 ${isLow ? "bg-red-400" : isMid ? "bg-yellow-400" : "bg-green-400"}`} />
             <View className="p-4">
               <View className="flex-row items-center justify-between mb-3">
                 <View>
-                  <Text className="font-bold text-gray-900 text-base">{item.cylinder_name}</Text>
+                  <Text className="font-bold text-gray-900 dark:text-gray-50 text-base">{item.cylinder_name}</Text>
                   {cyl && (
-                    <Text className="text-xs text-gray-400">
+                    <Text className="text-xs text-gray-400 dark:text-gray-500">
                       Venda: {formatCurrency(cyl.sale_price)} · Custo: {formatCurrency(cyl.cost_price)}
                     </Text>
                   )}
@@ -131,18 +131,18 @@ export default function InventoryScreen() {
                 <View className="gap-2">
                   <View className="flex-row gap-3">
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-500 mb-1">Preço de Venda (R$)</Text>
+                      <Text className="text-xs text-gray-500 dark:text-gray-400 mb-1">Preço de Venda (R$)</Text>
                       <TextInput
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-gray-900"
+                        className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-50"
                         keyboardType="decimal-pad"
                         value={editSalePrice}
                         onChangeText={setEditSalePrice}
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-500 mb-1">Custo (R$)</Text>
+                      <Text className="text-xs text-gray-500 dark:text-gray-400 mb-1">Custo (R$)</Text>
                       <TextInput
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-gray-900"
+                        className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-50"
                         keyboardType="decimal-pad"
                         value={editCostPrice}
                         onChangeText={setEditCostPrice}
@@ -160,18 +160,18 @@ export default function InventoryScreen() {
                 <View className="gap-2">
                   <View className="flex-row gap-3">
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-500 mb-1">Cheios</Text>
+                      <Text className="text-xs text-gray-500 dark:text-gray-400 mb-1">Cheios</Text>
                       <TextInput
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-gray-900"
+                        className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-50"
                         keyboardType="numeric"
                         value={editFull}
                         onChangeText={setEditFull}
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-500 mb-1">Vazios</Text>
+                      <Text className="text-xs text-gray-500 dark:text-gray-400 mb-1">Vazios</Text>
                       <TextInput
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-gray-900"
+                        className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-50"
                         keyboardType="numeric"
                         value={editEmpty}
                         onChangeText={setEditEmpty}
@@ -187,13 +187,13 @@ export default function InventoryScreen() {
                 </View>
               ) : (
                 <View className="flex-row gap-3">
-                  <View className="flex-1 bg-green-50 rounded-xl p-3 items-center">
-                    <Text className="text-2xl font-bold text-green-700">{item.full_qty}</Text>
-                    <Text className="text-xs text-green-600 font-medium">Cheios</Text>
+                  <View className="flex-1 bg-green-50 dark:bg-green-950 rounded-xl p-3 items-center">
+                    <Text className="text-2xl font-bold text-green-700 dark:text-green-300">{item.full_qty}</Text>
+                    <Text className="text-xs text-green-600 dark:text-green-400 font-medium">Cheios</Text>
                   </View>
-                  <View className="flex-1 bg-gray-50 rounded-xl p-3 items-center">
-                    <Text className="text-2xl font-bold text-gray-500">{item.empty_qty}</Text>
-                    <Text className="text-xs text-gray-400 font-medium">Vazios</Text>
+                  <View className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 items-center">
+                    <Text className="text-2xl font-bold text-gray-500 dark:text-gray-400">{item.empty_qty}</Text>
+                    <Text className="text-xs text-gray-400 dark:text-gray-500 font-medium">Vazios</Text>
                   </View>
                 </View>
               )}
@@ -206,7 +206,7 @@ export default function InventoryScreen() {
         className="mx-4 mb-3 flex-row items-center justify-between py-2"
         onPress={() => setShowRestocks((v) => !v)}
       >
-        <Text className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+        <Text className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
           Histórico de Entradas
         </Text>
         <Ionicons name={showRestocks ? "chevron-up" : "chevron-down"} size={16} color="#9ca3af" />
@@ -215,23 +215,23 @@ export default function InventoryScreen() {
       {showRestocks && (
         <View className="mx-4 mb-4 gap-2">
           {restocks.length === 0 ? (
-            <Text className="text-gray-400 text-sm text-center py-4">Nenhuma entrada registrada</Text>
+            <Text className="text-gray-400 dark:text-gray-500 text-sm text-center py-4">Nenhuma entrada registrada</Text>
           ) : (
             restocks.map((r) => (
-              <View key={r.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100">
+              <View key={r.id} className="bg-white dark:bg-gray-900 rounded-xl px-4 py-3 border border-gray-100 dark:border-gray-800">
                 <View className="flex-row items-center justify-between">
-                  <Text className="font-bold text-gray-900">{r.cylinder_name}</Text>
-                  <Text className="font-bold text-gray-900">{formatCurrency(r.total_cost)}</Text>
+                  <Text className="font-bold text-gray-900 dark:text-gray-50">{r.cylinder_name}</Text>
+                  <Text className="font-bold text-gray-900 dark:text-gray-50">{formatCurrency(r.total_cost)}</Text>
                 </View>
                 <View className="flex-row items-center justify-between mt-1">
-                  <Text className="text-xs text-gray-400">
+                  <Text className="text-xs text-gray-400 dark:text-gray-500">
                     {r.quantity} un · {formatCurrency(r.cost_per_unit)}/un
                   </Text>
-                  <Text className="text-xs text-gray-400">
+                  <Text className="text-xs text-gray-400 dark:text-gray-500">
                     {new Date(r.created_at).toLocaleDateString("pt-BR")}
                   </Text>
                 </View>
-                {r.notes && <Text className="text-xs text-gray-400 mt-1 italic">{r.notes}</Text>}
+                {r.notes && <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">{r.notes}</Text>}
               </View>
             ))
           )}

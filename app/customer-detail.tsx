@@ -22,10 +22,10 @@ const paymentLabels: Record<string, string> = {
 };
 
 const paymentColors: Record<string, string> = {
-  cash: "bg-green-100 text-green-700",
-  pix: "bg-blue-100 text-blue-700",
-  card: "bg-purple-100 text-purple-700",
-  fiado: "bg-red-100 text-red-700",
+  cash: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+  pix: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  card: "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300",
+  fiado: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
 export default function CustomerDetailScreen() {
@@ -83,20 +83,20 @@ export default function CustomerDetailScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-gray-50 dark:bg-gray-950"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
     >
       {customer && (
         <>
-          <View className="mx-4 mt-4 bg-white rounded-2xl border border-gray-100 p-4 mb-3">
+          <View className="mx-4 mt-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 mb-3">
             <View className="flex-row items-start justify-between">
               <View className="flex-1">
-                <Text className="text-xl font-bold text-gray-900">{customer.name}</Text>
+                <Text className="text-xl font-bold text-gray-900 dark:text-gray-50">{customer.name}</Text>
                 {customer.phone && (
-                  <Text className="text-sm text-gray-500 mt-0.5">{customer.phone}</Text>
+                  <Text className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{customer.phone}</Text>
                 )}
                 {customer.address && (
-                  <Text className="text-sm text-gray-400 mt-0.5">{customer.address}</Text>
+                  <Text className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">{customer.address}</Text>
                 )}
               </View>
               <View className="flex-row items-center gap-1">
@@ -123,13 +123,13 @@ export default function CustomerDetailScreen() {
             </View>
 
             <View className="flex-row gap-3 mt-3">
-              <View className="flex-1 bg-gray-50 rounded-xl p-3 items-center">
-                <Text className="text-lg font-bold text-gray-900">{sales.length}</Text>
-                <Text className="text-xs text-gray-400">Compras</Text>
+              <View className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 items-center">
+                <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">{sales.length}</Text>
+                <Text className="text-xs text-gray-400 dark:text-gray-500">Compras</Text>
               </View>
-              <View className="flex-1 bg-gray-50 rounded-xl p-3 items-center">
-                <Text className="text-lg font-bold text-gray-900">{formatCurrency(totalSpent)}</Text>
-                <Text className="text-xs text-gray-400">Total gasto</Text>
+              <View className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 items-center">
+                <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">{formatCurrency(totalSpent)}</Text>
+                <Text className="text-xs text-gray-400 dark:text-gray-500">Total gasto</Text>
               </View>
             </View>
 
@@ -151,31 +151,33 @@ export default function CustomerDetailScreen() {
             )}
           </View>
 
-          <Text className="px-4 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
+          <Text className="px-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">
             Histórico de Compras
           </Text>
 
           {sales.length === 0 ? (
             <View className="items-center py-12">
               <Ionicons name="cart-outline" size={40} color="#d1d5db" />
-              <Text className="text-gray-400 mt-2">Nenhuma compra registrada</Text>
+              <Text className="text-gray-400 dark:text-gray-500 mt-2">Nenhuma compra registrada</Text>
             </View>
           ) : (
             <View className="mx-4 gap-2 mb-8">
               {sales.map((s: any) => {
-                const colors = paymentColors[s.payment_method as string] ?? "bg-gray-100 text-gray-700";
-                const [bg, txt] = colors.split(" ");
+                const colors = paymentColors[s.payment_method as string] ?? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300";
+                const parts = colors.split(" ");
+                const bg = parts.slice(0, 2).join(" ");
+                const txt = parts.slice(2).join(" ");
                 return (
-                  <View key={s.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100">
+                  <View key={s.id} className="bg-white dark:bg-gray-900 rounded-xl px-4 py-3 border border-gray-100 dark:border-gray-800">
                     <View className="flex-row items-center justify-between">
-                      <Text className="font-bold text-gray-900">
+                      <Text className="font-bold text-gray-900 dark:text-gray-50">
                         {s.quantity}x {s.cylinder_name}
                         {s.is_exchange ? " (troca)" : ""}
                       </Text>
-                      <Text className="font-bold text-gray-900">{formatCurrency(s.total)}</Text>
+                      <Text className="font-bold text-gray-900 dark:text-gray-50">{formatCurrency(s.total)}</Text>
                     </View>
                     <View className="flex-row items-center justify-between mt-1">
-                      <Text className="text-xs text-gray-400">{formatDate(s.created_at)}</Text>
+                      <Text className="text-xs text-gray-400 dark:text-gray-500">{formatDate(s.created_at)}</Text>
                       <View className={`rounded-full px-2 py-0.5 ${bg}`}>
                         <Text className={`text-xs font-semibold ${txt}`}>
                           {paymentLabels[s.payment_method as string] ?? s.payment_method}

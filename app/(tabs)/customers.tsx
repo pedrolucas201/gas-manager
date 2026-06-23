@@ -14,14 +14,14 @@ function formatCurrency(value: number) {
 function CustomerCard({ item, onSettle, onEdit, onDetail }: { item: Customer; onSettle: (c: Customer) => void; onEdit: (c: Customer) => void; onDetail: (c: Customer) => void }) {
   const hasDebt = item.balance < 0;
   return (
-    <View className="bg-white mx-4 mb-2 rounded-xl border border-gray-100 overflow-hidden">
+    <View className="bg-white dark:bg-gray-900 mx-4 mb-2 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
       {hasDebt && <View className="h-0.5 bg-red-400" />}
       <View className="p-4">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity className="flex-1" onPress={() => onDetail(item)}>
-            <Text className="font-bold text-gray-900">{item.name}</Text>
+            <Text className="font-bold text-gray-900 dark:text-gray-50">{item.name}</Text>
             {item.phone && (
-              <Text className="text-xs text-gray-400">{item.phone}</Text>
+              <Text className="text-xs text-gray-400 dark:text-gray-500">{item.phone}</Text>
             )}
           </TouchableOpacity>
           <View className="flex-row items-center gap-2">
@@ -37,8 +37,8 @@ function CustomerCard({ item, onSettle, onEdit, onDetail }: { item: Customer; on
                 <Text className="text-white text-xs opacity-80 text-center">Pagar</Text>
               </TouchableOpacity>
             ) : (
-              <View className="bg-green-100 rounded-lg px-3 py-1.5">
-                <Text className="text-green-700 text-xs font-semibold">Em dia</Text>
+              <View className="bg-green-100 dark:bg-green-900 rounded-lg px-3 py-1.5">
+                <Text className="text-green-700 dark:text-green-300 text-xs font-semibold">Em dia</Text>
               </View>
             )}
           </View>
@@ -108,7 +108,7 @@ export default function CustomersScreen() {
   const totalDebt = debtors.reduce((acc, c) => acc + Math.abs(c.balance), 0);
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-gray-50 dark:bg-gray-950">
       <FlatList
         data={filtered}
         keyExtractor={(item) => String(item.id)}
@@ -117,7 +117,7 @@ export default function CustomersScreen() {
         ListHeaderComponent={
           <View className="px-4 pt-4 pb-3">
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-lg font-bold text-gray-900">Clientes</Text>
+              <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">Clientes</Text>
               <TouchableOpacity
                 className="bg-primary-500 rounded-xl px-3 py-2"
                 onPress={() => router.push("/customer-form")}
@@ -127,18 +127,18 @@ export default function CustomersScreen() {
             </View>
 
             {debtors.length > 0 && (
-              <View className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 flex-row items-center">
+              <View className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-3 mb-3 flex-row items-center">
                 <Ionicons name="alert-circle" size={18} color="#dc2626" />
-                <Text className="text-red-700 text-sm ml-2 font-medium">
+                <Text className="text-red-700 dark:text-red-400 text-sm ml-2 font-medium">
                   {debtors.length} devedor(es) · {formatCurrency(totalDebt)} total
                 </Text>
               </View>
             )}
 
-            <View className="bg-white border border-gray-200 rounded-xl flex-row items-center px-3">
+            <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl flex-row items-center px-3">
               <Ionicons name="search" size={16} color="#9ca3af" />
               <TextInput
-                className="flex-1 py-2.5 px-2 text-gray-900"
+                className="flex-1 py-2.5 px-2 text-gray-900 dark:text-gray-50"
                 placeholder="Buscar cliente..."
                 placeholderTextColor="#9ca3af"
                 value={search}
@@ -150,7 +150,7 @@ export default function CustomersScreen() {
         ListEmptyComponent={
           <View className="items-center py-16">
             <Ionicons name="people-outline" size={48} color="#d1d5db" />
-            <Text className="text-gray-400 mt-3 font-medium">Nenhum cliente encontrado</Text>
+            <Text className="text-gray-400 dark:text-gray-500 mt-3 font-medium">Nenhum cliente encontrado</Text>
           </View>
         }
         contentContainerStyle={{ paddingBottom: 100 }}

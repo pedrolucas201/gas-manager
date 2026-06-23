@@ -1,5 +1,6 @@
 import { Tabs, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SyncBadge } from "@/components/SyncBadge";
 import { signOutUser } from "@/lib/auth";
@@ -26,15 +27,17 @@ async function handleLogout() {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const dark = colorScheme === "dark";
 
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: "#f97316",
-        tabBarInactiveTintColor: "#9ca3af",
+        tabBarInactiveTintColor: dark ? "#6b7280" : "#9ca3af",
         tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e5e7eb",
+          backgroundColor: dark ? "#111827" : "#ffffff",
+          borderTopColor: dark ? "#1f2937" : "#e5e7eb",
           paddingBottom: insets.bottom + 8,
           height: 52 + insets.bottom,
         },
@@ -84,9 +87,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="reports"
         options={{
-          title: "Relatórios",
+          title: "Financeiro",
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="bar-chart" color={color} size={size} />
+            <TabIcon name="wallet" color={color} size={size} />
           ),
         }}
       />

@@ -32,17 +32,18 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1 bg-white dark:bg-gray-950"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View className="flex-1 items-center justify-center px-8 gap-4">
         <Text className="text-3xl font-bold text-orange-500 mb-4">
-          GasManager
+          Beto Gas
         </Text>
 
         <TextInput
-          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base"
+          className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-base text-gray-900 dark:text-gray-50"
           placeholder="E-mail"
+          placeholderTextColor="#9ca3af"
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -51,15 +52,16 @@ export default function LoginScreen() {
         />
 
         <TextInput
-          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base"
+          className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-base text-gray-900 dark:text-gray-50"
           placeholder="Senha"
+          placeholderTextColor="#9ca3af"
           secureTextEntry
           value={password}
           onChangeText={setPassword}
         />
 
         {error ? (
-          <Text className="text-red-500 text-sm text-center">{error}</Text>
+          <Text className="text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>
         ) : null}
 
         <TouchableOpacity

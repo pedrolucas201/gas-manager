@@ -49,13 +49,14 @@ export default function CustomerFormScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-gray-50" keyboardShouldPersistTaps="handled">
+    <ScrollView className="flex-1 bg-gray-50 dark:bg-gray-950" keyboardShouldPersistTaps="handled">
       <View className="px-4 pt-4 gap-4">
         <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">Nome *</Text>
+          <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Nome *</Text>
           <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-base"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-gray-50 text-base"
             placeholder="Nome do cliente"
+            placeholderTextColor="#9ca3af"
             value={name}
             onChangeText={setName}
             autoFocus={!isEdit}
@@ -63,10 +64,11 @@ export default function CustomerFormScreen() {
         </View>
 
         <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">Telefone</Text>
+          <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Telefone</Text>
           <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-base"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-gray-50 text-base"
             placeholder="(00) 00000-0000"
+            placeholderTextColor="#9ca3af"
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
@@ -74,10 +76,11 @@ export default function CustomerFormScreen() {
         </View>
 
         <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">Endereço</Text>
+          <Text className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Endereço</Text>
           <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-gray-50"
             placeholder="Rua, número, bairro..."
+            placeholderTextColor="#9ca3af"
             value={address}
             onChangeText={setAddress}
             multiline
@@ -86,7 +89,7 @@ export default function CustomerFormScreen() {
         </View>
 
         <TouchableOpacity
-          className={`rounded-xl py-4 items-center mt-2 mb-8 ${saving ? "bg-gray-300" : "bg-primary-500"}`}
+          className={`rounded-xl py-4 items-center mt-2 mb-8 ${saving ? "bg-gray-300 dark:bg-gray-700" : "bg-primary-500"}`}
           onPress={handleSave}
           disabled={saving}
         >
