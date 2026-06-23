@@ -6,6 +6,7 @@ import {
   deleteCustomer,
   settleCustomerDebt,
 } from "@/db/queries/customers";
+import { applyEvent } from "@/lib/sync/apply";
 import type { SQLiteDatabase } from "expo-sqlite";
 
 async function freshDb(): Promise<SQLiteDatabase> {
@@ -162,5 +163,41 @@ describe("settleCustomerDebt", () => {
       `SELECT balance FROM customers WHERE id = ?`, [id]
     );
     expect(c?.balance).toBeCloseTo(-100, 5);
+  });
+
+  it("insere uuid em applied_events para que pull não re-aplique o balance", async () => {
+    const db = await freshDb();
+    const id = await addCustomer(db, { name: "Duplo" });
+    await db.runAsync(`UPDATE customers SET balance = -200 WHERE id = ?`, [id]);
+
+    await settleCustomerDebt(db, id, 200, "pix");
+
+    const settlement = await db.getFirstAsync<{ uuid: string }>(
+      `SELECT uuid FROM debt_settlements LIMIT 1`
+    );
+    const cust = await db.getFirstAsync<{ uuid: string }>(
+      `SELECT uuid FROM customers WHERE id = ?`, [id]
+    );
+
+    // Simula o pull periódico re-enviando o mesmo evento
+    await applyEvent(db, {
+      kind: "debt_settlement",
+      sequence: 1,
+      server_received_at: "2026-06-23T10:00:00Z",
+      data: {
+        id: settlement!.uuid,
+        customer_id: cust!.uuid,
+        amount: "200",
+        payment_method: "pix",
+        server_received_at: "2026-06-23T10:00:00Z",
+        sequence: 1,
+      },
+    });
+
+    const c = await db.getFirstAsync<{ balance: number }>(
+      `SELECT balance FROM customers WHERE id = ?`, [id]
+    );
+    // balance deve ser 0 (quitado uma vez), não +200 (re-aplicado)
+    expect(c?.balance).toBeCloseTo(0, 5);
   });
 });

@@ -142,6 +142,13 @@ export async function settleCustomerDebt(
       [uuid, id, customer.name, amount, paymentMethod]
     );
 
+    // Marca em applied_events para que applySettlement (pull path) não
+    // re-aplique o balance bump quando o evento voltar do servidor.
+    await db.runAsync(
+      `INSERT OR IGNORE INTO applied_events (event_uuid) VALUES (?)`,
+      [uuid]
+    );
+
     await enqueue(db, {
       event_uuid: uuid,
       kind: "debt_settlement",
