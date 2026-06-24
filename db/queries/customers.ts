@@ -137,9 +137,9 @@ export async function settleCustomerDebt(
     );
 
     await db.runAsync(
-      `INSERT INTO debt_settlements (uuid, customer_id, customer_name, amount, payment_method)
-       VALUES (?, ?, ?, ?, ?)`,
-      [uuid, id, customer.name, amount, paymentMethod]
+      `INSERT INTO debt_settlements (uuid, customer_id, customer_name, amount, payment_method, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [uuid, id, customer.name, amount, paymentMethod, now]
     );
 
     // Marca em applied_events para que applySettlement (pull path) não
