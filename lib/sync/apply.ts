@@ -92,6 +92,7 @@ interface PulledRestock {
   total_cost: string;
   notes: string | null;
   server_received_at: string;
+  client_created_at: string;
 }
 
 interface PulledStockAdj {
@@ -139,6 +140,7 @@ interface PulledExpense {
   description: string | null;
   amount: string;
   server_received_at: string;
+  client_created_at: string;
 }
 
 interface PulledStockSet {
@@ -369,7 +371,7 @@ async function applyRestock(db: SQLiteDatabase, d: PulledRestock): Promise<void>
       costPerUnit,
       totalCost,
       d.notes ?? null,
-      d.server_received_at,
+      d.client_created_at,
     ]
   );
 
@@ -484,9 +486,9 @@ async function applyCustomerDelete(
 
 async function applyExpense(db: SQLiteDatabase, d: PulledExpense): Promise<void> {
   await db.runAsync(
-    `INSERT OR IGNORE INTO expenses (uuid, category, description, amount)
-     VALUES (?, ?, ?, ?)`,
-    [d.id, d.category, d.description ?? null, parseFloat(d.amount)]
+    `INSERT OR IGNORE INTO expenses (uuid, category, description, amount, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [d.id, d.category, d.description ?? null, parseFloat(d.amount), d.client_created_at]
   );
 }
 

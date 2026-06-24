@@ -425,7 +425,7 @@ func (q *Queries) PullDebtSettlements(ctx context.Context, arg PullDebtSettlemen
 }
 
 const pullExpenses = `-- name: PullExpenses :many
-SELECT id, category, description, amount, server_received_at, sequence
+SELECT id, category, description, amount, server_received_at, client_created_at, sequence
 FROM expenses WHERE sequence > $1 ORDER BY sequence LIMIT $2
 `
 
@@ -440,6 +440,7 @@ type PullExpensesRow struct {
 	Description      *string
 	Amount           pgtype.Numeric
 	ServerReceivedAt pgtype.Timestamptz
+	ClientCreatedAt  pgtype.Timestamptz
 	Sequence         int64
 }
 
@@ -458,6 +459,7 @@ func (q *Queries) PullExpenses(ctx context.Context, arg PullExpensesParams) ([]P
 			&i.Description,
 			&i.Amount,
 			&i.ServerReceivedAt,
+			&i.ClientCreatedAt,
 			&i.Sequence,
 		); err != nil {
 			return nil, err
@@ -472,7 +474,7 @@ func (q *Queries) PullExpenses(ctx context.Context, arg PullExpensesParams) ([]P
 
 const pullRestocks = `-- name: PullRestocks :many
 SELECT id, cylinder_type_id, quantity, cost_per_unit, total_cost, notes,
-  server_received_at, sequence
+  server_received_at, client_created_at, sequence
 FROM restocks WHERE sequence > $1 ORDER BY sequence LIMIT $2
 `
 
@@ -489,6 +491,7 @@ type PullRestocksRow struct {
 	TotalCost        pgtype.Numeric
 	Notes            *string
 	ServerReceivedAt pgtype.Timestamptz
+	ClientCreatedAt  pgtype.Timestamptz
 	Sequence         int64
 }
 
@@ -509,6 +512,7 @@ func (q *Queries) PullRestocks(ctx context.Context, arg PullRestocksParams) ([]P
 			&i.TotalCost,
 			&i.Notes,
 			&i.ServerReceivedAt,
+			&i.ClientCreatedAt,
 			&i.Sequence,
 		); err != nil {
 			return nil, err

@@ -42,6 +42,7 @@ type RestockDTO struct {
 	TotalCost        string  `json:"total_cost"`    // decimal string
 	Notes            *string `json:"notes"`
 	ServerReceivedAt string  `json:"server_received_at"`
+	ClientCreatedAt  string  `json:"client_created_at"`
 	Sequence         int64   `json:"sequence"`
 }
 
@@ -142,6 +143,7 @@ func mapRestockRow(r gen.PullRestocksRow) RestockDTO {
 		TotalCost:        numericToWire(r.TotalCost),
 		Notes:            r.Notes,
 		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		ClientCreatedAt:  timestamptzToWire(r.ClientCreatedAt),
 		Sequence:         r.Sequence,
 	}
 }
@@ -187,6 +189,7 @@ type ExpenseDTO struct {
 	Description      *string `json:"description"`
 	Amount           string  `json:"amount"` // decimal string
 	ServerReceivedAt string  `json:"server_received_at"`
+	ClientCreatedAt  string  `json:"client_created_at"`
 	Sequence         int64   `json:"sequence"`
 }
 
@@ -197,6 +200,7 @@ func mapExpenseRow(r gen.PullExpensesRow) ExpenseDTO {
 		Description:      r.Description,
 		Amount:           numericToWire(r.Amount),
 		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		ClientCreatedAt:  timestamptzToWire(r.ClientCreatedAt),
 		Sequence:         r.Sequence,
 	}
 }

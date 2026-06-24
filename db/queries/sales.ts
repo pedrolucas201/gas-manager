@@ -22,8 +22,8 @@ export async function registerSale(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO sales (uuid, customer_id, cylinder_type_id, quantity, unit_price, cost_price, total, payment_method, is_exchange)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales (uuid, customer_id, cylinder_type_id, quantity, unit_price, cost_price, total, payment_method, is_exchange, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         data.customer_id,
@@ -34,6 +34,7 @@ export async function registerSale(
         total,
         data.payment_method,
         data.is_exchange ? 1 : 0,
+        now,
       ]
     );
 

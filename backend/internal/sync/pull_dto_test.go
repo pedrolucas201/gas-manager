@@ -372,6 +372,7 @@ func restockDTOFixture() RestockDTO {
 		TotalCost:        "900.00",
 		Notes:            nil,
 		ServerReceivedAt: "2025-01-01T12:00:00Z",
+		ClientCreatedAt:  "2025-01-01T11:59:00Z",
 		Sequence:         2,
 	}
 }
@@ -395,6 +396,7 @@ func debtSettlementDTOFixture() DebtSettlementDTO {
 		Amount:           "120.50",
 		PaymentMethod:    "dinheiro",
 		ServerReceivedAt: "2025-01-01T12:00:00Z",
+		ClientCreatedAt:  "2025-01-01T11:59:00Z",
 		Sequence:         4,
 	}
 }
@@ -425,6 +427,7 @@ func pullRestockRowFixture() gen.PullRestocksRow {
 		TotalCost:        numeric("900.00"),
 		Notes:            nil,
 		ServerReceivedAt: pgtype.Timestamptz{Time: fixedTime(), Valid: true},
+		ClientCreatedAt:  pgtype.Timestamptz{Time: fixedTime(), Valid: true},
 		Sequence:         2,
 	}
 }
@@ -436,6 +439,7 @@ func pullDebtSettlementRowFixture() gen.PullDebtSettlementsRow {
 		Amount:           numeric("120.50"),
 		PaymentMethod:    "dinheiro",
 		ServerReceivedAt: pgtype.Timestamptz{Time: fixedTime(), Valid: true},
+		ClientCreatedAt:  pgtype.Timestamptz{Time: fixedTime(), Valid: true},
 		Sequence:         4,
 	}
 }

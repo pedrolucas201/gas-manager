@@ -37,9 +37,9 @@ export async function addRestock(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO restocks (uuid, cylinder_type_id, quantity, cost_per_unit, total_cost, notes)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuid, data.cylinder_type_id, data.quantity, data.cost_per_unit, total_cost, data.notes ?? null]
+      `INSERT INTO restocks (uuid, cylinder_type_id, quantity, cost_per_unit, total_cost, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [uuid, data.cylinder_type_id, data.quantity, data.cost_per_unit, total_cost, data.notes ?? null, now]
     );
 
     await db.runAsync(

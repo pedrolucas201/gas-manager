@@ -71,7 +71,7 @@ FROM sales WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: PullRestocks :many
 SELECT id, cylinder_type_id, quantity, cost_per_unit, total_cost, notes,
-  server_received_at, sequence
+  server_received_at, client_created_at, sequence
 FROM restocks WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: PullStockAdjustments :many
@@ -102,7 +102,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7)
 RETURNING sequence, server_received_at;
 
 -- name: PullExpenses :many
-SELECT id, category, description, amount, server_received_at, sequence
+SELECT id, category, description, amount, server_received_at, client_created_at, sequence
 FROM expenses WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: GetStockSetByID :one

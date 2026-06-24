@@ -12,8 +12,8 @@ export async function addExpense(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO expenses (uuid, category, description, amount) VALUES (?, ?, ?, ?)`,
-      [uuid, data.category, data.description ?? null, data.amount]
+      `INSERT INTO expenses (uuid, category, description, amount, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [uuid, data.category, data.description ?? null, data.amount, now]
     );
 
     await enqueue(db, {
