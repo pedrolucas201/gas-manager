@@ -29,6 +29,12 @@ export interface PendingEvent extends OutboxEntry {
   last_error: string | null;
 }
 
+// Called by the sync engine so a write to the outbox triggers an immediate push.
+let _onEnqueue: (() => void) | null = null;
+export function setEnqueueHook(fn: (() => void) | null): void {
+  _onEnqueue = fn;
+}
+
 // enqueue adds a pending event. It is idempotent on event_uuid (INSERT OR
 // IGNORE), so re-enqueuing the same event after a crash never duplicates it.
 export async function enqueue(db: SQLiteDatabase, entry: OutboxEntry): Promise<void> {
@@ -37,6 +43,7 @@ export async function enqueue(db: SQLiteDatabase, entry: OutboxEntry): Promise<v
      VALUES (?, ?, ?, ?)`,
     [entry.event_uuid, entry.kind, entry.payload, entry.client_created_at]
   );
+  _onEnqueue?.();
 }
 
 // pendingEvents returns everything still awaiting a successful push, oldest

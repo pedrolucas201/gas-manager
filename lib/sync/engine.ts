@@ -15,11 +15,13 @@ import {
   markDone,
   markError,
   pendingCount as getOutboxCount,
+  setEnqueueHook,
   type PendingEvent,
 } from "@/lib/sync/outbox";
 import { applyEvent } from "@/lib/sync/apply";
 import { signOutUser } from "@/lib/auth";
 import { useSyncStore } from "@/store/sync";
+import { useAppStore } from "@/store";
 
 const FACT_KINDS = new Set([
   "sale",
@@ -63,7 +65,7 @@ export async function triggerManualSync(): Promise<void> {
 
 export class SyncEngine {
   private _stopped = false;
-  private _syncing = false;
+  private _syncPromise: Promise<void> | null = null;
   private _retryTimer?: ReturnType<typeof setTimeout>;
   private _pollTimer?: ReturnType<typeof setInterval>;
   private _unsubscribe?: () => void;
@@ -197,42 +199,59 @@ export class SyncEngine {
   }
 
   async syncNow(): Promise<void> {
-    if (this._stopped || this._syncing) return;
-    this._syncing = true;
+    if (this._stopped) return;
+    // Se já há um sync em curso, aguarda ele terminar em vez de retornar imediatamente.
+    // Isso garante que onRefresh sempre espera dados frescos antes de chamar load().
+    if (this._syncPromise) return this._syncPromise;
+
     clearTimeout(this._retryTimer);
     useSyncStore.getState().setStatus("syncing");
-    try {
-      await this.pullAll();
-      await this.pushOnce();
-      useSyncStore.getState().setStatus("idle");
-    } catch (e) {
-      if (e instanceof AuthError) {
-        await signOutUser();
-        return;
+
+    this._syncPromise = (async () => {
+      try {
+        await this.pullAll();
+        // Notifica todas as telas para recarregar após receber eventos do servidor.
+        const { bumpSales, bumpInventory, bumpCustomers, bumpExpenses } =
+          useAppStore.getState();
+        bumpSales();
+        bumpInventory();
+        bumpCustomers();
+        bumpExpenses();
+        await this.pushOnce();
+        useSyncStore.getState().setStatus("idle");
+      } catch (e) {
+        if (e instanceof AuthError) {
+          await signOutUser();
+          return;
+        }
+        if (!(e instanceof NetworkError)) {
+          console.warn("[SyncEngine] syncNow erro:", e);
+        }
+        useSyncStore.getState().setStatus("error");
+        if (!this._stopped) {
+          this._retryTimer = setTimeout(() => this.syncNow(), 10_000);
+        }
+      } finally {
+        this._syncPromise = null;
       }
-      if (!(e instanceof NetworkError)) {
-        console.warn("[SyncEngine] syncNow erro:", e);
-      }
-      useSyncStore.getState().setStatus("error");
-      if (!this._stopped) {
-        this._retryTimer = setTimeout(() => this.syncNow(), 30_000);
-      }
-    } finally {
-      this._syncing = false;
-    }
+    })();
+
+    return this._syncPromise;
   }
 
   start(): void {
     this._stopped = false;
     activeEngine = this;
+    setEnqueueHook(() => this.syncNow());
     this.syncNow();
     this._subscribeToNetwork();
-    this._pollTimer = setInterval(() => this.syncNow(), 60_000);
+    this._pollTimer = setInterval(() => this.syncNow(), 10_000);
   }
 
   stop(): void {
     this._stopped = true;
     if (activeEngine === this) activeEngine = null;
+    setEnqueueHook(null);
     clearTimeout(this._retryTimer);
     this._retryTimer = undefined;
     clearInterval(this._pollTimer);
