@@ -377,7 +377,7 @@ func (q *Queries) InsertStockAdjustment(ctx context.Context, arg InsertStockAdju
 }
 
 const pullDebtSettlements = `-- name: PullDebtSettlements :many
-SELECT id, customer_id, amount, payment_method, server_received_at, sequence
+SELECT id, customer_id, amount, payment_method, server_received_at, client_created_at, sequence
 FROM debt_settlements WHERE sequence > $1 ORDER BY sequence LIMIT $2
 `
 
@@ -392,6 +392,7 @@ type PullDebtSettlementsRow struct {
 	Amount           pgtype.Numeric
 	PaymentMethod    string
 	ServerReceivedAt pgtype.Timestamptz
+	ClientCreatedAt  pgtype.Timestamptz
 	Sequence         int64
 }
 
@@ -410,6 +411,7 @@ func (q *Queries) PullDebtSettlements(ctx context.Context, arg PullDebtSettlemen
 			&i.Amount,
 			&i.PaymentMethod,
 			&i.ServerReceivedAt,
+			&i.ClientCreatedAt,
 			&i.Sequence,
 		); err != nil {
 			return nil, err

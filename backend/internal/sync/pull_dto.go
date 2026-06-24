@@ -63,6 +63,7 @@ type DebtSettlementDTO struct {
 	Amount           string `json:"amount"` // decimal string
 	PaymentMethod    string `json:"payment_method"`
 	ServerReceivedAt string `json:"server_received_at"`
+	ClientCreatedAt  string `json:"client_created_at"`
 	Sequence         int64  `json:"sequence"`
 }
 
@@ -164,6 +165,7 @@ func mapDebtSettlementRow(r gen.PullDebtSettlementsRow) DebtSettlementDTO {
 		Amount:           numericToWire(r.Amount),
 		PaymentMethod:    r.PaymentMethod,
 		ServerReceivedAt: timestamptzToWire(r.ServerReceivedAt),
+		ClientCreatedAt:  timestamptzToWire(r.ClientCreatedAt),
 		Sequence:         r.Sequence,
 	}
 }

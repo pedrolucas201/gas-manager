@@ -79,7 +79,7 @@ SELECT id, cylinder_type_id, field, delta, reason, server_received_at, sequence
 FROM stock_adjustments WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: PullDebtSettlements :many
-SELECT id, customer_id, amount, payment_method, server_received_at, sequence
+SELECT id, customer_id, amount, payment_method, server_received_at, client_created_at, sequence
 FROM debt_settlements WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: InsertSaleVoid :one

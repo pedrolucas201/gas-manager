@@ -107,6 +107,7 @@ interface PulledSettlement {
   customer_id: string;
   amount: string;
   payment_method: string;
+  client_created_at: string;
 }
 
 interface PulledCustomerUpsert {
@@ -437,9 +438,9 @@ async function applySettlement(db: SQLiteDatabase, d: PulledSettlement): Promise
   // Grava no log local (INSERT OR IGNORE para idempotência adicional).
   await db.runAsync(
     `INSERT OR IGNORE INTO debt_settlements
-       (uuid, customer_id, customer_name, amount, payment_method)
-     VALUES (?, ?, ?, ?, ?)`,
-    [d.id, customerId, customer?.name ?? "(sincronizando)", amount, d.payment_method]
+       (uuid, customer_id, customer_name, amount, payment_method, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [d.id, customerId, customer?.name ?? "(sincronizando)", amount, d.payment_method, d.client_created_at]
   );
 }
 
