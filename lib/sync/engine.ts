@@ -19,6 +19,7 @@ import {
   type PendingEvent,
 } from "@/lib/sync/outbox";
 import { applyEvent } from "@/lib/sync/apply";
+import { compensateError } from "@/lib/sync/compensate";
 import { signOutUser } from "@/lib/auth";
 import { useSyncStore } from "@/store/sync";
 import { useAppStore } from "@/store";
@@ -106,6 +107,13 @@ export class SyncEngine {
           await markDone(this.db, r.id);
         } else {
           await markError(this.db, r.id, r.error ?? "server_error");
+          const failed = facts.find((e) => e.event_uuid === r.id);
+          if (failed) {
+            await compensateError(this.db, failed);
+            const { bumpSales, bumpInventory, bumpCustomers, bumpExpenses } =
+              useAppStore.getState();
+            bumpSales(); bumpInventory(); bumpCustomers(); bumpExpenses();
+          }
         }
       }
     } catch (e) {
