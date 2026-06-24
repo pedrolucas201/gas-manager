@@ -7,9 +7,13 @@ export async function getSettlements(
   to: string
 ): Promise<DebtSettlement[]> {
   return db.getAllAsync<DebtSettlement>(
-    `SELECT * FROM debt_settlements
-     WHERE date(created_at) BETWEEN ? AND ?
-     ORDER BY created_at DESC`,
+    `SELECT ds.id, ds.uuid, ds.customer_id,
+            COALESCE(c.name, ds.customer_name) AS customer_name,
+            ds.amount, ds.payment_method, ds.created_at
+     FROM debt_settlements ds
+     LEFT JOIN customers c ON c.id = ds.customer_id
+     WHERE date(ds.created_at) BETWEEN ? AND ?
+     ORDER BY ds.created_at DESC`,
     [from, to]
   );
 }
@@ -19,9 +23,13 @@ export async function getSettlementsByCustomer(
   customerId: number
 ): Promise<DebtSettlement[]> {
   return db.getAllAsync<DebtSettlement>(
-    `SELECT * FROM debt_settlements
-     WHERE customer_id = ?
-     ORDER BY created_at DESC`,
+    `SELECT ds.id, ds.uuid, ds.customer_id,
+            COALESCE(c.name, ds.customer_name) AS customer_name,
+            ds.amount, ds.payment_method, ds.created_at
+     FROM debt_settlements ds
+     LEFT JOIN customers c ON c.id = ds.customer_id
+     WHERE ds.customer_id = ?
+     ORDER BY ds.created_at DESC`,
     [customerId]
   );
 }

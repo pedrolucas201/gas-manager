@@ -1,81 +1,130 @@
-# Handoff: sessão 8 — stock_set absoluto + LWW
+# Handoff: sessão 10 — sync reativo + compensação de eventos fantasmas
 
-**Data:** 2026-06-23
-**Status:** concluído. stock_set implementado, backend deployado (00011-jfn), APK em build.
+**Data:** 2026-06-24
+**Status:** concluído. APK v0.12.1 gerado e disponível.
 
 ## 1. Objetivo
-Implementar edição de estoque por **valor absoluto** (`stock_set` + LWW) para reconciliação entre dispositivos. O dono não conseguia reconciliar o estoque manualmente porque os deltas eram calculados sobre o estado local de quem editava.
+Tornar o sync do app 100% reativo (mudanças de qualquer celular refletem em todos em segundos), corrigir o pull-to-refresh que não funcionava, e implementar compensação automática de eventos fantasmas (evento rejeitado pelo servidor mas aplicado localmente).
 
 ## 2. Contexto essencial
-- **Mobile:** Expo SDK 54 + SQLite + NativeWind. Offline-first: eventos em `sync_outbox` → `SyncEngine` push/pull a cada 60s.
-- **Backend:** Go + Postgres (Supabase), Cloud Run `gas-backend`, `https://gas-backend-750551393506.southamerica-east1.run.app`. Revisão atual: `gas-backend-00011-jfn`.
+- **Mobile:** Expo SDK 54 + SQLite + NativeWind. Offline-first: eventos em `sync_outbox` → `SyncEngine` push/pull.
+- **Backend:** Go + Postgres (Supabase), Cloud Run `gas-backend`, `https://gas-backend-750551393506.southamerica-east1.run.app`. Revisão ativa: `gas-backend-00013-8qg` (não houve deploy de backend nesta sessão).
 - **Web:** React+Vite+Tailwind+Recharts em `web/`, Firebase Hosting → **https://gas-manager-499616.web.app**.
 - **Auth:** Firebase `gas-manager-499616`. **EAS:** `pedrogomesdev`/`gas-manager`, perfil `preview`.
-- **Docker Desktop** deve estar LIGADO para os testes do backend (testcontainers). Iniciar: `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"`, aguardar `docker ps` responder.
 - **Go só roda via PowerShell** neste ambiente (Bash não tem go no PATH).
-- **Deploy Cloud Run:** SEMPRE `--update-env-vars` (NUNCA `--set-env-vars`, que apaga as outras vars e quebra o container).
+- **Deploy Cloud Run:** SEMPRE `--update-env-vars` (NUNCA `--set-env-vars`).
 
-## 3. O que foi feito (commit `022ac3a`)
+## 3. O que foi feito
 
-### Mudança central: `stock_set` absoluto + LWW
-**Antes:** `updateInventory` calculava deltas relativos (full_qty - cur.full_qty) e enfileirava dois `stock_adjustment`. Problemas: delta calculado sobre estado local divergia entre devices.
+### Diagnóstico do banco (Supabase)
+- Estoque estava em 37 cheios / 56 vazios no banco (o +23 de um `stock_adjustment` antigo que disparou com o novo sync).
+- Corrigido diretamente via SQL: `UPDATE inventory SET full_qty=37, empty_qty=33, last_set_at=NOW()`.
+- Inserido evento `stock_set` (seq 2, client_created_at=NOW()) direto em `stock_sets` para propagar correção via pull para os celulares.
+- Removida entrada de restock de 26 unidades do dia 22/06 a pedido do dono: `DELETE FROM restocks WHERE id='40f999be-...'`. Não afetou estoque pois `stock_set` posterior é mais recente (LWW).
+- 18 `stock_adjustments` (delta) antigos confirmados como resíduos — código atual já usa `stock_set` absoluto, não gera mais.
 
-**Agora:** `updateInventory` enfileira um único `stock_set` com valores **absolutos** (`full_qty`, `empty_qty`) + `client_created_at`. LWW por `client_created_at` garante que o set mais recente vence, independente da ordem de chegada.
+### Feat 1: sync reativo (commit `98ff070`)
+**Problema:** poll de 60s + `syncNow()` retornava imediatamente se já estava rodando → pull-to-refresh não esperava o sync concluir.
 
-### Backend
-- `0007_stock_sets.up.sql` — tabela `stock_sets` (append-only) + `ALTER TABLE inventory ADD last_set_at TIMESTAMPTZ`
-- `events.sql` — 4 queries: `GetStockSetByID`, `InsertStockSet`, `ApplyStockSet` (LWW via `WHERE last_set_at IS NULL OR client_created_at > last_set_at`), `PullStockSets`
-- `gen/events.sql.go` — código Go gerado manualmente para as 4 queries
-- `types.go` — `StockSetPayload` + campo `StockSet` em `PushEvent`
-- `push.go` — case "stock_set" em `existingHash` e `applyEvent`
-- `pull.go` — `Cursor.StockSet int64`, query de pull, advance do cursor
-- `pull_dto.go` — `StockSetDTO` + `mapStockSetRow`
-- `stock_set_test.go` — 5 testes: Apply/Duplicate/LWW-NewerWins/Pull-InStream/CursorAdvances
+**Fixes em `lib/sync/outbox.ts`:**
+- Adicionado `setEnqueueHook(fn)`: hook que dispara `syncNow()` imediatamente após qualquer `enqueue()`.
 
-### Mobile
-- `db/database.ts` — migration v6: `ALTER TABLE inventory ADD COLUMN last_set_at TEXT`; `SCHEMA_VERSION = 6`
-- `db/queries/inventory.ts` — `updateInventory` emite `stock_set` absoluto (um evento único, não dois deltas)
-- `lib/api.ts` — `StockSetPayload` + `PushEvent.stock_set`
-- `lib/sync/outbox.ts` — `OutboxKind` += `"stock_set"`
-- `lib/sync/apply.ts` — `PulledStockSet` + `applyStockSet` (dedupe via `applied_events` + LWW via `last_set_at`)
-- `lib/sync/engine.ts` — `FACT_KINDS` += `"stock_set"`, cursor advance `StockSet`
-- `db/__tests__/inventory.sync.test.ts` — testes reescritos (8 testes: set absoluto, LWW newer/older, idempotência, dedupe)
-- `db/__tests__/migration.test.ts` — atualizado para v6 + verifica coluna `last_set_at`
+**Fixes em `lib/sync/engine.ts`:**
+- `_syncing: boolean` → `_syncPromise: Promise<void> | null`: quem chama `syncNow()` enquanto já está sincronizando recebe a mesma promise e aguarda o resultado real.
+- Poll: 60s → **10s**.
+- Retry em erro: 30s → **10s**.
+- `start()`: registra `setEnqueueHook(() => this.syncNow())` → push imediato após qualquer evento.
+- `stop()`: limpa o hook.
+- Após `pullAll()`: chama `bumpSales()`, `bumpInventory()`, `bumpCustomers()`, `bumpExpenses()` → telas re-renderizam automaticamente sem precisar de pull-to-refresh.
+- Importa `useAppStore` de `@/store`.
+
+### Feat 2: compensação de eventos fantasmas (commit `1009352`)
+**Problema:** quando o servidor rejeita um evento (`status:'error'`), o efeito local (venda inserida, saldo debitado, etc.) fica no SQLite — "fantasma". O evento no outbox fica com `status='error'`, `pendingCount=0`, app mostra "sincronizado" mas o dado local está errado.
+
+**Novo arquivo `lib/sync/compensate.ts`:**
+- `compensateError(db, event)`: switch por `event.kind`, desfaz o efeito local dentro de uma transação.
+- `debt_settlement`: reverte `customers.balance -= amount`, deleta da tabela `debt_settlements`.
+- `sale`: reverte inventory (+full, -empty), reverte balance fiado, soft-delete da venda (`voided_at`).
+- `restock`: reverte `inventory.full_qty -= qty`, deleta da tabela `restocks`.
+- `expense`: deleta da tabela `expenses`.
+- `stock_adjustment`: aplica -delta no inventory, deleta da tabela `stock_adjustments`.
+- Remove de `applied_events` para que um pull futuro possa re-aplicar a versão do servidor.
+- Tipos sem compensação: `stock_set` (LWW do pull corrige), catálogo (LWW).
+
+**Integração em `lib/sync/engine.ts` (`_pushFacts`):**
+```ts
+} else {
+  await markError(this.db, r.id, r.error ?? "server_error");
+  const failed = facts.find((e) => e.event_uuid === r.id);
+  if (failed) {
+    await compensateError(this.db, failed);
+    bumpSales(); bumpInventory(); bumpCustomers(); bumpExpenses();
+  }
+}
+```
+
+### APKs gerados
+- **v0.12.0** (só sync reativo): https://expo.dev/artifacts/eas/FczwVGkiZ1byq9l0wWk67jGQnUqdriTkY197m_ZftJk.apk
+- **v0.12.1** (sync reativo + compensação): https://expo.dev/artifacts/eas/NhlGarKu1zLBPc2fr2PzWKnEm3SW0c02Ay_n7zrM54w.apk
 
 ## 4. Estado atual
-- **125 testes mobile passando.** Backend `sync` e `db` verdes; `reports` falha por Docker não rootless (pré-existente).
-- Backend deployado: `gas-backend-00011-jfn` (ativo, sem erros nos logs).
-- APK em build via EAS (em andamento no momento do handoff).
+- **125 testes mobile passando.** Backend Go não foi tocado.
+- Sync reativo funcionando: mudanças chegam em <1s (push imediato) e outros celulares recebem em até 10s (poll).
+- Pull-to-refresh: corrigido — agora espera o sync terminar antes de re-renderizar.
+- Compensação: implementada para `sale`, `debt_settlement`, `restock`, `expense`, `stock_adjustment`.
+- Estoque no banco: 32 cheios / 38 vazios (correto após 5 trocas pós-correção).
+- **Vale fantasma no Beto:** ainda existe no SQLite local dele (v0.12.1 previne recorrência, mas não limpa o passado). Reinstalar o app resolve.
 
 ## 5. Próximos passos
-1. **Confirmar APK novo** — verificar link no EAS dashboard (`pedrogomesdev`/`gas-manager`).
-2. **Limpeza manual das 2 vendas presas** no celular do dono (`sync_outbox WHERE status='error'`) — NÃO ligar retry automático antes disso.
-3. **Pendências menores de sync:** retry com cap, `created_at` temporal, erro engolido no pull (`applyEventSafe`).
+1. **Beto reinstalar o app** para limpar o vale fantasma existente (opcional — só visual, não afeta servidor).
+2. **Retry automático com cap** — `markError` ainda é terminal para eventos de rede. Classificar: transitório (retry com backoff) vs. permanente (park). Pré-condição: limpar 2 vendas presas antigas (ver sessão 9).
+3. **Erro engolido no pull** — `applyEventSafe` avança cursor mesmo quando evento falha. Revisar para não pular eventos permanentemente.
+4. **created_at de restocks/expenses** — réplicas ainda usam `server_received_at` (baixa prioridade, dono não reclamou).
 
 ## 6. Perguntas em aberto
-- Senhas Firebase ainda `123456` (pedro/maria/beto).
+- Senhas Firebase permanecem `123456` (pedro/maria/beto) — decisão do dono, não mudar.
+- 2 vendas presas antigas (sessão 7) ainda no outbox do celular-fonte com `status='error'` — limpeza manual pendente.
 
 ## 7. Artefatos relevantes
 Arquivos modificados nesta sessão:
-- `backend/internal/db/migrations/0007_stock_sets.{up,down}.sql`
-- `backend/internal/db/queries/events.sql`
-- `backend/internal/db/gen/events.sql.go`
-- `backend/internal/sync/{types,push,pull,pull_dto}.go`
-- `backend/internal/sync/stock_set_test.go`
-- `backend/internal/sync/testutil_test.go`
-- `db/database.ts`, `db/queries/inventory.ts`
-- `lib/api.ts`, `lib/sync/{outbox,apply,engine}.ts`
-- `db/__tests__/{inventory.sync,migration}.test.ts`
+- `lib/sync/outbox.ts` — `setEnqueueHook` + chamada no `enqueue()`
+- `lib/sync/engine.ts` — `_syncPromise`, poll 10s, bump store após pull, compensação no `_pushFacts`
+- `lib/sync/compensate.ts` — novo, compensação por tipo de evento
 
-Comandos:
+Comandos úteis:
 ```powershell
-npx jest --no-coverage                                   # testes mobile
-cd backend; go test ./... -count=1 -timeout 600s         # testes backend (Docker ON)
-npx eas-cli build -p android --profile preview --non-interactive  # APK
+npx jest --no-coverage                                                 # testes mobile
+npx eas-cli build --platform android --profile preview --non-interactive  # build APK
+npx eas-cli build:list --platform android --limit 1 --json             # último link APK
+```
+
+Queries úteis (Supabase):
+```sql
+-- Estado do inventário
+SELECT ct.name, i.full_qty, i.empty_qty, i.last_set_at
+FROM inventory i JOIN cylinder_types ct ON ct.id = i.cylinder_type_id;
+
+-- Últimos stock_sets
+SELECT full_qty, empty_qty, client_created_at FROM stock_sets ORDER BY sequence DESC LIMIT 5;
+
+-- Vales recentes
+SELECT ds.amount, c.name, ds.client_created_at
+FROM debt_settlements ds JOIN customers c ON c.id = ds.customer_id
+ORDER BY ds.server_received_at DESC LIMIT 10;
+```
+
+Conexão Supabase (via psql):
+```
+--host=aws-1-sa-east-1.pooler.supabase.com --port=5432
+--username="postgres.aealxmiyotyeoutlqljy" --dbname=postgres
+PGPASSWORD do Secret Manager: gcloud secrets versions access latest --secret=DATABASE_URL --project=gas-manager-499616
 ```
 
 ## 8. Instruções pra próxima sessão
-- **stock_set está done.** O dono pode agora abrir a tela de Estoque em qualquer device e digitar o valor absoluto atual — todos os devices convergem para esse valor.
-- Antes de qualquer retry automático de eventos presos, fazer a limpeza manual (ver `project_sync_known_issues.md`).
-- Execução: o dono prefere **inline** (não subagentes) para implementar; usa TL+QA para debater abordagem/revisar quando pedido. Commits sem menção ao Claude.
-- Tom direto, decisões técnicas fechadas; ir à implementação completa, sem versões minimalistas.
+- v0.12.1 é o APK mais recente — link acima.
+- Backend não foi alterado, revisão ativa continua `gas-backend-00013-8qg`.
+- Migration 0007 já aplicada — não reaplicar.
+- O vale fantasma do Beto some com reinstalação do app (SQLite limpo).
+- Execução inline (não subagentes); commits sem menção ao Claude.
+- Tom direto; ir à implementação completa, sem versões minimalistas.
+- Próxima feature sugerida: retry automático com cap (pré-condição: limpar vendas presas da sessão 7).
