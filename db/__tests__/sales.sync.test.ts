@@ -3,6 +3,8 @@ import { createTestDb } from "@/db/__tests__/helpers/testdb";
 import {
   registerSale,
   voidSale,
+  unvoidSale,
+  getVoidedSales,
   getSales,
   getTodaySales,
   getDashboardStats,
@@ -149,6 +151,81 @@ describe("voidSale", () => {
 
     const inv = await db.getFirstAsync<{ full_qty: number }>(`SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]);
     expect(inv?.full_qty).toBe(10); // só reverteu uma vez
+  });
+});
+
+// ---------------------------------------------------------------------------
+// unvoidSale (local) + getVoidedSales
+// ---------------------------------------------------------------------------
+
+describe("unvoidSale (local)", () => {
+  it("limpa voided_at, re-aplica inventário e enfileira unvoid_sale", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 2, unit_price: 120, cost_price: 90, payment_method: "cash", is_exchange: false });
+    const saleRow = await db.getFirstAsync<{ id: number; uuid: string }>(`SELECT id, uuid FROM sales LIMIT 1`);
+
+    await voidSale(db, saleRow!.id);
+    await db.runAsync(`UPDATE sync_outbox SET status = 'done'`); // void "enviado"
+    // pós-void: full 10
+    expect((await db.getFirstAsync<{ full_qty: number }>(`SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]))?.full_qty).toBe(10);
+
+    await unvoidSale(db, saleRow!.id);
+
+    const sale = await db.getFirstAsync<{ voided_at: string | null }>(`SELECT voided_at FROM sales WHERE id = ?`, [saleRow!.id]);
+    expect(sale?.voided_at).toBeNull();
+    // re-aplicado: full 8
+    expect((await db.getFirstAsync<{ full_qty: number }>(`SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]))?.full_qty).toBe(8);
+
+    const outbox = await db.getFirstAsync<{ kind: string; payload: string }>(
+      `SELECT kind, payload FROM sync_outbox WHERE status = 'pending'`
+    );
+    expect(outbox?.kind).toBe("unvoid_sale");
+    expect(JSON.parse(outbox!.payload).id).toBe(saleRow!.uuid);
+  });
+
+  it("re-aplica dívida fiado ao restaurar", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    const r = await db.runAsync(`INSERT INTO customers (name, uuid, balance, updated_at) VALUES ('Maria','cust-unvoid',0,datetime('now'))`);
+    const custId = r.lastInsertRowId;
+    await registerSale(db, { customer_id: custId, cylinder_type_id: cid, quantity: 1, unit_price: 120, cost_price: 90, payment_method: "fiado", is_exchange: false });
+    const saleRow = await db.getFirstAsync<{ id: number }>(`SELECT id FROM sales LIMIT 1`);
+
+    await voidSale(db, saleRow!.id);
+    expect((await db.getFirstAsync<{ balance: number }>(`SELECT balance FROM customers WHERE id = ?`, [custId]))?.balance).toBeCloseTo(0, 5);
+
+    await unvoidSale(db, saleRow!.id);
+    expect((await db.getFirstAsync<{ balance: number }>(`SELECT balance FROM customers WHERE id = ?`, [custId]))?.balance).toBeCloseTo(-120, 5);
+  });
+
+  it("é no-op se a venda já está ativa (não enfileira nada)", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 1, unit_price: 120, cost_price: 90, payment_method: "cash", is_exchange: false });
+    await db.runAsync(`UPDATE sync_outbox SET status = 'done'`);
+    const saleRow = await db.getFirstAsync<{ id: number }>(`SELECT id FROM sales LIMIT 1`);
+
+    await unvoidSale(db, saleRow!.id); // venda ativa
+
+    const pending = await db.getAllAsync(`SELECT * FROM sync_outbox WHERE status = 'pending'`);
+    expect(pending).toHaveLength(0);
+    expect((await db.getFirstAsync<{ full_qty: number }>(`SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]))?.full_qty).toBe(9);
+  });
+});
+
+describe("getVoidedSales", () => {
+  it("retorna só vendas anuladas, mais recentes primeiro", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 1, unit_price: 120, cost_price: 90, payment_method: "cash", is_exchange: false });
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 1, unit_price: 100, cost_price: 90, payment_method: "pix", is_exchange: false });
+    const first = await db.getFirstAsync<{ id: number }>(`SELECT id FROM sales ORDER BY id ASC LIMIT 1`);
+    await voidSale(db, first!.id);
+
+    const voided = await getVoidedSales(db);
+    expect(voided).toHaveLength(1);
+    expect(voided.every((s) => s.voided_at !== null)).toBe(true);
   });
 });
 

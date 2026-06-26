@@ -37,6 +37,7 @@ export interface Sale {
   payment_method: PaymentMethod;
   is_exchange: number;
   created_at: string;
+  voided_at?: string | null;
   customer_name?: string;
   cylinder_name?: string;
 }

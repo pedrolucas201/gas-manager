@@ -123,6 +123,96 @@ export async function voidSale(db: SQLiteDatabase, id: number) {
   });
 }
 
+// restoreSaleAggregates limpa voided_at e re-aplica os agregados como na venda
+// original (espelho de registerSale): full -= qty, empty += qty (troca), e saldo
+// fiado - total. Idempotente: no-op se a venda já está ativa ou não existe.
+// Retorna o uuid da venda restaurada, ou null se não fez nada. Deve ser chamada
+// dentro de uma transação pelo caller.
+async function restoreSaleAggregates(
+  db: SQLiteDatabase,
+  id: number
+): Promise<string | null> {
+  const sale = await db.getFirstAsync<
+    Sale & { uuid: string; voided_at: string | null }
+  >(`SELECT * FROM sales WHERE id = ? AND voided_at IS NOT NULL`, [id]);
+  if (!sale) return null;
+
+  await db.runAsync(`UPDATE sales SET voided_at = NULL WHERE id = ?`, [id]);
+  await db.runAsync(
+    `UPDATE inventory SET full_qty = full_qty - ?, empty_qty = empty_qty + ?
+     WHERE cylinder_type_id = ?`,
+    [sale.quantity, sale.is_exchange ? sale.quantity : 0, sale.cylinder_type_id]
+  );
+  if (sale.payment_method === "fiado" && sale.customer_id) {
+    await db.runAsync(
+      `UPDATE customers SET balance = balance - ? WHERE id = ?`,
+      [sale.total, sale.customer_id]
+    );
+  }
+  return sale.uuid;
+}
+
+// unvoidSale restaura uma venda anulada que JÁ foi sincronizada como void e
+// enfileira unvoid_sale para propagar a restauração ao servidor/outros devices.
+export async function unvoidSale(db: SQLiteDatabase, id: number) {
+  await db.withTransactionAsync(async () => {
+    const uuid = await restoreSaleAggregates(db, id);
+    if (!uuid) return; // já ativa → nada a propagar
+
+    await enqueue(db, {
+      event_uuid: randomUUID(),
+      kind: "unvoid_sale",
+      payload: JSON.stringify({ id: uuid }),
+      client_created_at: new Date().toISOString(),
+    });
+  });
+}
+
+// getVoidedSales lista vendas anuladas (para a tela "Vendas canceladas"),
+// mais recentes primeiro.
+export async function getVoidedSales(db: SQLiteDatabase): Promise<Sale[]> {
+  return db.getAllAsync<Sale>(
+    `SELECT s.*, c.name as customer_name, ct.name as cylinder_name
+     FROM sales s
+     LEFT JOIN customers c ON s.customer_id = c.id
+     JOIN cylinder_types ct ON s.cylinder_type_id = ct.id
+     WHERE s.voided_at IS NOT NULL
+     ORDER BY s.voided_at DESC`
+  );
+}
+
+// getPendingVoids lista os cancelamentos ainda na fila (não enviados), com os
+// dados da venda local correspondente, para a tela de revisão do disjuntor.
+export async function getPendingVoids(
+  db: SQLiteDatabase
+): Promise<Array<Sale & { event_uuid: string }>> {
+  return db.getAllAsync<Sale & { event_uuid: string }>(
+    `SELECT s.*, c.name as customer_name, o.event_uuid
+     FROM sync_outbox o
+     JOIN sales s ON s.uuid = json_extract(o.payload, '$.id')
+     LEFT JOIN customers c ON s.customer_id = c.id
+     WHERE o.kind = 'void_sale' AND o.status = 'pending'
+     ORDER BY o.id ASC`
+  );
+}
+
+// discardPendingVoid desfaz um cancelamento que AINDA NÃO foi enviado: remove o
+// evento do outbox e restaura a venda localmente. Não enfileira unvoid_sale —
+// o servidor nunca soube do void.
+export async function discardPendingVoid(
+  db: SQLiteDatabase,
+  eventUuid: string,
+  saleId: number
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `DELETE FROM sync_outbox WHERE event_uuid = ? AND status = 'pending'`,
+      [eventUuid]
+    );
+    await restoreSaleAggregates(db, saleId);
+  });
+}
+
 export async function getSaleById(
   db: SQLiteDatabase,
   id: number
