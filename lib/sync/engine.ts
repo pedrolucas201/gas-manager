@@ -21,6 +21,7 @@ import {
 } from "@/lib/sync/outbox";
 import { applyEvent } from "@/lib/sync/apply";
 import { compensateError } from "@/lib/sync/compensate";
+import { VOID_CONFIRM_THRESHOLD } from "@/lib/sync/constants";
 import { signOutUser } from "@/lib/auth";
 import { useSyncStore } from "@/store/sync";
 import { useAppStore } from "@/store";
@@ -65,12 +66,18 @@ export async function triggerManualSync(): Promise<void> {
   await activeEngine?.syncNow();
 }
 
+/** Confirma o envio do lote de cancelamentos pendentes (disjuntor). */
+export async function approveVoidBatch(): Promise<void> {
+  await activeEngine?.approveVoidBatch();
+}
+
 export class SyncEngine {
   private _stopped = false;
   private _syncPromise: Promise<void> | null = null;
   private _retryTimer?: ReturnType<typeof setTimeout>;
   private _pollTimer?: ReturnType<typeof setInterval>;
   private _unsubscribe?: () => void;
+  private _voidBatchApproved = false;
 
   constructor(private db: SQLiteDatabase) {}
 
@@ -90,13 +97,34 @@ export class SyncEngine {
     if (await this._pushIndividual(catalog)) return;
     // 2. Facts in a single batch.
     if (await this._pushFacts(facts)) return;
-    // 3. Voids last.
+
+    // 3. Voids: disjuntor contra cancelamento em massa. Se há muitos voids
+    // pendentes e o usuário ainda não confirmou este lote, pausa o envio de
+    // voids/unvoids e sinaliza a UI. Catálogo e fatos já foram enviados.
+    if (voids.length >= VOID_CONFIRM_THRESHOLD && !this._voidBatchApproved) {
+      useSyncStore.getState().setVoidConfirmNeeded(voids.length);
+      return;
+    }
     if (await this._pushIndividual(voids)) return;
+    // Lote de voids enviado (ou abaixo do limite): limpa o gate.
+    this._voidBatchApproved = false;
+    useSyncStore.getState().setVoidConfirmNeeded(0);
+
     // 4. Unvoids depois dos voids (ordem causal consistente).
     if (await this._pushIndividual(unvoids)) return;
 
     const count = await getOutboxCount(this.db);
     useSyncStore.getState().setPendingCount(count);
+  }
+
+  /**
+   * Usuário confirmou o envio do lote de cancelamentos pendentes (disjuntor).
+   * Libera o gate e dispara um novo sync que agora enviará os voids.
+   */
+  async approveVoidBatch(): Promise<void> {
+    this._voidBatchApproved = true;
+    useSyncStore.getState().setVoidConfirmNeeded(0);
+    await this.syncNow();
   }
 
   // _pushFacts sends fact events in one batch. Returns true if the caller should

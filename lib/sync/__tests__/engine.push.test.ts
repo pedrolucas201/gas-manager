@@ -2,6 +2,7 @@ import { initDatabase } from "@/db/database";
 import { createTestDb } from "@/db/__tests__/helpers/testdb";
 import { enqueue } from "@/lib/sync/outbox";
 import { SyncEngine, getSyncEngine, triggerManualSync } from "@/lib/sync/engine";
+import { useSyncStore } from "@/store/sync";
 import type { SQLiteDatabase } from "expo-sqlite";
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,7 @@ describe("SyncEngine.pushOnce", () => {
     mockUpsertCustomer.mockResolvedValue(undefined);
     mockDeleteCustomer.mockResolvedValue(undefined);
     mockUpsertCylinderType.mockResolvedValue(undefined);
+    useSyncStore.setState({ voidConfirmNeeded: 0 });
   });
 
   it("não chama pushEvents se o outbox está vazio", async () => {
@@ -297,6 +299,71 @@ describe("SyncEngine.pushOnce", () => {
       `SELECT status FROM sync_outbox WHERE event_uuid = 'sale-uuid-push-1'`
     );
     expect(row?.status).toBe("pending");
+  });
+});
+
+describe("SyncEngine — disjuntor de cancelamento em massa", () => {
+  beforeEach(() => {
+    jest.clearAllMocks(); // zera contagens entre os testes deste describe
+    useSyncStore.setState({ voidConfirmNeeded: 0 });
+    // approveVoidBatch chama syncNow → pullAll → pullPage. Garante que o pull
+    // resolve um page vazio (o resetAllMocks de outros describes pode ter
+    // limpado a implementação do mock).
+    const api = jest.requireMock("@/lib/api");
+    api.pullPage.mockResolvedValue({ events: [], next_cursor: "", has_more: false });
+    mockVoidSale.mockResolvedValue(undefined);
+  });
+
+  async function enqueueVoid(db: SQLiteDatabase, n: number) {
+    await enqueue(db, {
+      event_uuid: `mass-void-${n}`,
+      kind: "void_sale",
+      payload: JSON.stringify({ id: `sale-${n}` }),
+      client_created_at: new Date().toISOString(),
+    });
+  }
+
+  it("NÃO envia voids quando >= limite; bloqueia e sinaliza a UI", async () => {
+    const db = await freshDb();
+    for (let i = 0; i < 3; i++) await enqueueVoid(db, i);
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(mockVoidSale).not.toHaveBeenCalled();
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(3);
+    const pending = await db.getAllAsync(
+      `SELECT * FROM sync_outbox WHERE status = 'pending' AND kind = 'void_sale'`
+    );
+    expect(pending).toHaveLength(3); // nada foi enviado
+  });
+
+  it("após approveVoidBatch, envia o lote e limpa o sinal", async () => {
+    const db = await freshDb();
+    for (let i = 0; i < 3; i++) await enqueueVoid(db, i);
+    const engine = new SyncEngine(db);
+
+    await engine.pushOnce();
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(3);
+
+    await engine.approveVoidBatch();
+
+    expect(mockVoidSale).toHaveBeenCalledTimes(3);
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(0);
+    const pending = await db.getAllAsync(
+      `SELECT * FROM sync_outbox WHERE status = 'pending' AND kind = 'void_sale'`
+    );
+    expect(pending).toHaveLength(0);
+  });
+
+  it("envia voids normalmente quando abaixo do limite (sem confirmação)", async () => {
+    const db = await freshDb();
+    await enqueueVoid(db, 1);
+    await enqueueVoid(db, 2); // 2 < 3
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(mockVoidSale).toHaveBeenCalledTimes(2);
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(0);
   });
 });
 
