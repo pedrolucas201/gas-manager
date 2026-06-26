@@ -2,11 +2,34 @@ import "../global.css";
 import { Stack, router } from "expo-router";
 import { SQLiteProvider, useSQLiteContext } from "expo-sqlite";
 import { Suspense, useEffect, useRef } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ActivityIndicator, View, Text, TouchableOpacity } from "react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { initDatabase } from "@/db/database";
 import { onAuthChange } from "@/lib/auth";
 import { SyncEngine } from "@/lib/sync/engine";
+import { useSyncStore } from "@/store/sync";
+
+function VoidConfirmBanner() {
+  const voidConfirmNeeded = useSyncStore((s) => s.voidConfirmNeeded);
+  const insets = useSafeAreaInsets();
+  if (voidConfirmNeeded <= 0) return null;
+  return (
+    <TouchableOpacity
+      onPress={() => router.push("/pending-voids")}
+      style={{ paddingTop: insets.top }}
+      className="bg-red-600 px-4 pb-3"
+    >
+      <View className="flex-row items-center gap-2 pt-2">
+        <Ionicons name="warning-outline" size={18} color="#ffffff" />
+        <Text className="text-white font-semibold flex-1">
+          {voidConfirmNeeded} cancelamento{voidConfirmNeeded > 1 ? "s" : ""} aguardando confirmação — toque para revisar
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color="#ffffff" />
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
@@ -34,7 +57,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, [db]);
 
-  return <>{children}</>;
+  return (
+    <View className="flex-1">
+      <VoidConfirmBanner />
+      <View className="flex-1">{children}</View>
+    </View>
+  );
 }
 
 export default function RootLayout() {

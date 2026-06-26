@@ -5,6 +5,8 @@ import {
   voidSale,
   unvoidSale,
   getVoidedSales,
+  getPendingVoids,
+  discardPendingVoid,
   getSales,
   getTodaySales,
   getDashboardStats,
@@ -226,6 +228,54 @@ describe("getVoidedSales", () => {
     const voided = await getVoidedSales(db);
     expect(voided).toHaveLength(1);
     expect(voided.every((s) => s.voided_at !== null)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPendingVoids / discardPendingVoid (disjuntor de cancelamento em massa)
+// ---------------------------------------------------------------------------
+
+describe("getPendingVoids", () => {
+  it("lista voids pendentes com os dados da venda local", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 1, unit_price: 120, cost_price: 90, payment_method: "cash", is_exchange: false });
+    const saleRow = await db.getFirstAsync<{ id: number; uuid: string }>(`SELECT id, uuid FROM sales LIMIT 1`);
+    await db.runAsync(`UPDATE sync_outbox SET status = 'done'`); // a venda já foi enviada
+    await voidSale(db, saleRow!.id);
+
+    const pending = await getPendingVoids(db);
+    expect(pending).toHaveLength(1);
+    expect(pending[0].id).toBe(saleRow!.id);
+    expect(pending[0].event_uuid).toBeTruthy();
+  });
+});
+
+describe("discardPendingVoid", () => {
+  it("remove o void pendente do outbox e restaura a venda localmente (sem unvoid)", async () => {
+    const db = await freshDb();
+    const cid = await getP13Id(db);
+    await registerSale(db, { customer_id: null, cylinder_type_id: cid, quantity: 2, unit_price: 120, cost_price: 90, payment_method: "cash", is_exchange: false });
+    const saleRow = await db.getFirstAsync<{ id: number; uuid: string }>(`SELECT id, uuid FROM sales LIMIT 1`);
+    await db.runAsync(`UPDATE sync_outbox SET status = 'done'`);
+    await voidSale(db, saleRow!.id); // anula local + enfileira void pendente
+    const voidEvt = await db.getFirstAsync<{ event_uuid: string }>(
+      `SELECT event_uuid FROM sync_outbox WHERE kind = 'void_sale' AND status = 'pending' LIMIT 1`
+    );
+
+    await discardPendingVoid(db, voidEvt!.event_uuid, saleRow!.id);
+
+    // outbox limpo
+    const remaining = await db.getFirstAsync(`SELECT 1 FROM sync_outbox WHERE event_uuid = ?`, [voidEvt!.event_uuid]);
+    expect(remaining).toBeNull();
+    // venda restaurada
+    const sale = await db.getFirstAsync<{ voided_at: string | null }>(`SELECT voided_at FROM sales WHERE id = ?`, [saleRow!.id]);
+    expect(sale?.voided_at).toBeNull();
+    // estoque re-aplicado: 10 - 2 = 8
+    expect((await db.getFirstAsync<{ full_qty: number }>(`SELECT full_qty FROM inventory WHERE cylinder_type_id = ?`, [cid]))?.full_qty).toBe(8);
+    // NÃO enfileirou unvoid_sale (servidor nunca soube do void)
+    const unvoid = await db.getFirstAsync(`SELECT 1 FROM sync_outbox WHERE kind = 'unvoid_sale'`);
+    expect(unvoid).toBeNull();
   });
 });
 
