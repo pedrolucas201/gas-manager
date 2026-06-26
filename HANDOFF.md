@@ -1,131 +1,49 @@
-# Handoff: sessão 11 — fixes de timestamp + (sincronizando)
+# Handoff: sessão 12 — proteção contra cancelamento em massa
 
-**Data:** 2026-06-24
-**Status:** concluído. APK pendente (limite EAS atingido — reseta 01/07). Backend deployado (00015).
+**Data:** 2026-06-26
+**Status:** implementação concluída e testada (147 testes mobile + backend verde). **Falta: aplicar migration 0008 em produção + deploy do backend + APK.** Branch `feat/protecao-cancelamento-massa` (NÃO mergeado ainda).
 
-## 1. Objetivo
-Corrigir bugs de exibição descobertos após o dono reinstalar o app: vales mostrando "(sincronizando)" no lugar do nome do cliente, e horários de eventos divergindo entre celulares.
+## 1. O que motivou a sessão
+O dono notou que vendas/estoque "sumiram" no app e no web. **Diagnóstico:** não houve perda de dados — houve **anulação em massa**. 16 eventos `void_sale` ficaram presos no outbox de um aparelho (sync travado) e drenaram todos de uma vez em 26/06 22:08, anulando quase todas as vendas no servidor (28 vendas, 0 ativas; `sale_voids` com 28 linhas). Confirmado via Postgres + logs do Cloud Run. **Decisão do dono:** NÃO desanular os dados antigos; em vez disso, blindar para nunca mais acontecer.
 
-## 2. Contexto essencial
-- **Mobile:** Expo SDK 54 + SQLite + NativeWind. Offline-first: eventos em `sync_outbox` → `SyncEngine` push/pull.
-- **Backend:** Go + Postgres (Supabase), Cloud Run `gas-backend`, `https://gas-backend-750551393506.southamerica-east1.run.app`. Revisão ativa: `gas-backend-00015-xxx`.
-- **Web:** React+Vite+Tailwind+Recharts em `web/`, Firebase Hosting → **https://gas-manager-499616.web.app**.
-- **Auth:** Firebase `gas-manager-499616`. **EAS:** `pedrogomesdev`/`gas-manager`, perfil `preview`.
-- **Go só roda via PowerShell** neste ambiente (Bash não tem go no PATH).
-- **Deploy Cloud Run:** SEMPRE `--update-env-vars` (NUNCA `--set-env-vars`).
+## 2. O que foi implementado (2 features)
 
-## 3. O que foi feito
+### #1 Disjuntor no push (cliente)
+- `lib/sync/engine.ts`: antes de enviar o lote de `void_sale`, se houver `>= VOID_CONFIRM_THRESHOLD` (3, em `lib/sync/constants.ts`) e o lote não tiver sido aprovado, **pausa** e seta `voidConfirmNeeded` no `store/sync.ts`. Catálogo e fatos continuam fluindo; voids/unvoids ficam represados. `approveVoidBatch()` (também export estático) libera o lote. Aprovação é **one-shot** (reseta após enviar; reiniciar o app re-pede).
+- UI: banner no `app/_layout.tsx` (AuthGate) quando `voidConfirmNeeded > 0` → abre `app/pending-voids.tsx` (tela de revisão). "Manter venda" = `discardPendingVoid` (descarta o void pendente e restaura a venda localmente, sem gerar evento, pois o servidor nunca soube). "Enviar N cancelamentos" = `approveVoidBatch`.
 
-### Fix 1: "(sincronizando)" permanente nos vales (commit `b934ed3`)
-**Problema:** `applySettlement` (pull path) grava `customer_name='(sincronizando)'` em `debt_settlements` quando o cliente ainda não chegou no pull. O `customer_upsert` posterior atualiza `customers.name` mas não atualiza o campo denormalizado.
+### #3 Cancelamento reversível (un-void)
+- Novo evento `unvoid_sale`. Backend: `POST /sync/unvoid-sale` (`backend/internal/sync/unvoid.go`) limpa `voided_at`/`voided_by`, **re-aplica** estoque/saldo (espelho de `applySale`) e grava em `sale_voids` com `kind='unvoid'`.
+- **Decisão de arquitetura (após revisão TL/QA):** void e unvoid compartilham o stream `sale_voids` (coluna `kind`, migration **0008_sale_void_kind**), com **sequência única (BIGSERIAL)** → ordem causal garantida na convergência entre devices. (A 1ª versão usava `catalog_events`, mas isso quebrava o avanço do cursor e não garantia ordem void-vs-unvoid — descartado.)
+- `backend/internal/sync/pull.go`: emite kind `void_sale`/`unvoid_sale` conforme `sale_voids.kind`; cursor `Void` avança para ambos.
+- Mobile: `applyUnvoidSale` em `lib/sync/apply.ts` (idempotente por `voided_at`), `unvoidSale` local + `getVoidedSales`/`restoreSaleAggregates` em `db/queries/sales.ts`, envio individual em `engine.ts`, `unvoidSale` em `lib/api.ts`. Tela `app/voided-sales.tsx` (lista canceladas + "Restaurar") com atalho na aba de vendas.
 
-**Fix:** `db/queries/settlements.ts` — ambas as queries fazem `LEFT JOIN customers c ON c.id = ds.customer_id` e retornam `COALESCE(c.name, ds.customer_name)`. O nome reflete sempre o estado atual de `customers`.
+## 3. PENDÊNCIAS CRÍTICAS antes de usar em produção
+1. **Aplicar migration 0008 no Postgres de produção** (ANTES do deploy; é backward-compatible — `ALTER TABLE sale_voids ADD COLUMN kind TEXT NOT NULL DEFAULT 'void'`, o backend antigo continua funcionando):
+   ```sql
+   ALTER TABLE sale_voids ADD COLUMN kind TEXT NOT NULL DEFAULT 'void'
+     CHECK (kind IN ('void','unvoid'));
+   ```
+2. **Deploy do backend** (skill `backend` ou):
+   ```powershell
+   gcloud run deploy gas-backend --source ./backend --region southamerica-east1 --project gas-manager-499616 --update-env-vars FIREBASE_PROJECT_ID=gas-manager-499616
+   ```
+3. **Merge do branch** `feat/protecao-cancelamento-massa` → `main`.
+4. **Gerar APK** (limite EAS reseta 01/07, ou build local Linux — ver sessão 11).
 
-### Fix 2: `client_created_at` em debt_settlements (commit `b64fc87`)
-**Problema:** `PullDebtSettlements` não expunha `client_created_at`; `applySettlement` não passava `created_at` no INSERT → cada device mostrava a hora do pull.
+## 4. Estado dos testes
+- **Mobile: 147 testes passando** (`npx jest --no-coverage`).
+- **Backend: verde** (`go test ./...` — atenção: testcontainers/Docker pode dar flake `unexpected EOF` em paralelo sob carga; re-rodar o pacote isolado confirma). Os testes do pacote `sync`, `catalog` e `reports` passam.
+- Plano completo: `docs/superpowers/plans/2026-06-26-protecao-cancelamento-em-massa.md`.
 
-**Fix:** Backend (SQL + gen + DTO) expõe `client_created_at`; `applySettlement` usa `d.client_created_at` no INSERT.
+## 5. Notas / limitações conhecidas
+- **Propagação do un-void:** um device que já tinha a venda anulada localmente reverte no próximo pull (evento `unvoid_sale`). Reinstalação (cursor 0) recebe void+unvoid em ordem e converge para o estado final correto.
+- **Disjuntor não persiste** entre reinícios do app (em memória) — proposital (mais seguro).
+- **#2 (limite server-side)** ficou de fora — complemento de defesa-em-profundidade para uma sessão futura.
 
-### Fix 3: `created_at` local de debt_settlements (commit `f3fd436`)
-**Problema:** `settleCustomerDebt` em `customers.ts` fazia INSERT sem `created_at`, usando `CURRENT_TIMESTAMP` do SQLite em vez do `now` já capturado para o outbox.
-
-**Fix:** INSERT agora passa `now` explicitamente como `created_at`.
-
-### Fix 4: `client_created_at` em restocks, expenses e sales (commit `965d21f`)
-**Mesmo padrão dos fixes 2+3, aplicado às demais entidades:**
-- Backend: `PullRestocks` e `PullExpenses` agora expõem `client_created_at`
-- `applyRestock`: usava `server_received_at` → agora usa `client_created_at`
-- `applyExpense`: INSERT sem `created_at` → agora usa `client_created_at`
-- `registerSale`, `addRestock`, `addExpense`: INSERT sem `created_at` → agora passa `now`
-- Fixtures de DTO atualizados (`pull_dto_test.go`)
-
-## 4. Estado atual
-- **125 testes mobile passando.**
-- Backend deployado com todas as correções — novos eventos já chegam com `client_created_at` correto.
-- APK pendente: limite gratuito EAS atingido, reseta 01/07. Para gerar antes: build local em Linux.
-- Beto precisa **desinstalar e reinstalar** o app após o novo APK para limpar os registros antigos com timestamp errado (INSERT OR IGNORE não atualiza registros já existentes).
-
-## 5. Como gerar o APK em Linux (Arch ou Ubuntu)
-
-```bash
-# Dependências (Arch)
-sudo pacman -S jdk17-openjdk nodejs npm
-
-# Android SDK via AUR ou manualmente:
-# https://developer.android.com/studio#command-line-tools-only
-# Extrair em ~/android-sdk e aceitar licenças:
-# ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-# ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34"
-
-export ANDROID_HOME=~/android-sdk
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-
-# Projeto
-git clone <repo-url>
-cd gas-manager
-npm install
-npx eas-cli login   # conta: pedrogomesdev
-npx eas-cli build --platform android --profile preview --local --non-interactive
-# APK gerado em: ./build-*.apk (ou caminho indicado no output)
-```
-
-## 6. Próximos passos
-1. **Gerar APK** — via EAS remoto (01/07) ou build local no Linux.
-2. **Beto reinstalar** com o novo APK para limpar timestamps errados.
-3. **Retry automático com cap** — `markError` ainda é terminal. Pré-condição: limpar 2 vendas presas no outbox do celular do dono (status `'error'` desde sessão 7).
-4. **Erro engolido no pull** — `applyEventSafe` em `engine.ts` avança cursor mesmo se evento falha.
-5. **created_at de restocks/expenses no servidor** — o pull agora envia `client_created_at`, mas registros antigos no banco ainda têm só `server_received_at` (baixa prioridade).
-
-## 7. Perguntas em aberto
-- Senhas Firebase: `123456` (pedro/maria/beto) — decisão do dono.
-- 2 vendas presas no outbox do dono com `status='error'` — limpeza manual pendente.
-
-## 8. Artefatos relevantes
-Arquivos modificados nesta sessão:
-- `db/queries/settlements.ts` — JOIN com customers
-- `db/queries/customers.ts` — `created_at: now` no INSERT de debt_settlement
-- `db/queries/sales.ts` — `created_at: now` no INSERT de sale
-- `db/queries/inventory.ts` — `created_at: now` no INSERT de restock
-- `db/queries/expenses.ts` — `created_at: now` no INSERT de expense
-- `lib/sync/apply.ts` — `client_created_at` em PulledRestock, PulledExpense, PulledSettlement + INSERTs
-- `backend/internal/db/queries/events.sql` — `client_created_at` em PullRestocks, PullExpenses, PullDebtSettlements
-- `backend/internal/db/gen/events.sql.go` — structs e scan atualizados
-- `backend/internal/sync/pull_dto.go` — DTOs e mappers atualizados
-- `backend/internal/sync/pull_dto_test.go` — fixtures atualizados
-
-Comandos úteis:
-```powershell
-npx jest --no-coverage                                                 # testes mobile
-npx eas-cli build --platform android --profile preview --non-interactive  # APK remoto (EAS)
-npx eas-cli build --platform android --profile preview --local --non-interactive  # APK local (Linux)
-npx eas-cli build:list --platform android --limit 3 --json             # últimos builds
-```
-
-```powershell
-# Deploy backend (rodar do diretório gas-manager)
-gcloud run deploy gas-backend --source ./backend --region southamerica-east1 --project gas-manager-499616 --update-env-vars FIREBASE_PROJECT_ID=gas-manager-499616
-```
-
-Queries úteis (Supabase):
-```sql
--- Vales recentes com client_created_at
-SELECT c.name, ds.amount, ds.payment_method,
-       ds.client_created_at AT TIME ZONE 'America/Sao_Paulo' AS criado_brt
-FROM debt_settlements ds
-LEFT JOIN customers c ON c.id = ds.customer_id
-ORDER BY ds.sequence DESC LIMIT 10;
-```
-
-Conexão Supabase:
-```
-host=aws-1-sa-east-1.pooler.supabase.com port=5432
-user=postgres.aealxmiyotyeoutlqljy dbname=postgres sslmode=require
-PGPASSWORD: gcloud secrets versions access latest --secret=DATABASE_URL --project=gas-manager-499616
-```
-
-## 9. Instruções para nova sessão
-- HANDOFF está atualizado — leia ele primeiro.
-- Memória do projeto fica em `~/.claude/projects/C--Users-PC-Documents-gas-manager/memory/` (só carrega neste Windows; no Linux, contexto vem do HANDOFF.md).
-- Backend revisão ativa: `gas-backend-00015-xxx` (verificar com `gcloud run revisions list`).
-- Execução inline; commits sem menção ao Claude.
-- Tom direto; implementação completa, sem versões minimalistas.
+## 6. Contexto herdado (sessões anteriores)
+- Mobile Expo SDK 54 + SQLite + NativeWind, offline-first (`sync_outbox` → SyncEngine push/pull).
+- Backend Go + Postgres (Supabase) em Cloud Run `gas-backend`. Migrations aplicadas **manualmente** (sem runner no startup). **Go só roda via PowerShell** neste ambiente. Deploy: SEMPRE `--update-env-vars`.
+- Web: `web/` React+Vite, Firebase Hosting → https://gas-manager-499616.web.app.
+- Conexão Supabase / segredo: `gcloud secrets versions access latest --secret=DATABASE_URL --project=gas-manager-499616`.
+- Commits sem menção ao Claude. Suíte inteira + revisão TL/QA antes de fechar.
