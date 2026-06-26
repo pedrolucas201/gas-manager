@@ -134,6 +134,10 @@ interface PulledVoidSale {
   id: string;
 }
 
+interface PulledUnvoidSale {
+  id: string;
+}
+
 interface PulledExpense {
   id: string;
   category: string;
@@ -168,6 +172,8 @@ export async function applyEvent(db: SQLiteDatabase, event: PullEvent): Promise<
       return applySale(db, event.data as PulledSale);
     case "void_sale":
       return applyVoidSale(db, event.data as PulledVoidSale);
+    case "unvoid_sale":
+      return applyUnvoidSale(db, event.data as PulledUnvoidSale);
     case "restock":
       return applyRestock(db, event.data as PulledRestock);
     case "stock_adjustment":
@@ -350,6 +356,53 @@ async function applyVoidSale(db: SQLiteDatabase, d: PulledVoidSale): Promise<voi
   if (sale.payment_method === "fiado" && sale.customer_id !== null) {
     await db.runAsync(
       `UPDATE customers SET balance = balance + ? WHERE id = ?`,
+      [sale.total, sale.customer_id]
+    );
+  }
+}
+
+async function applyUnvoidSale(db: SQLiteDatabase, d: PulledUnvoidSale): Promise<void> {
+  // Busca a venda pelo uuid. Só prossegue se encontrada E atualmente anulada.
+  const sale = await db.getFirstAsync<{
+    id: number;
+    customer_id: number | null;
+    cylinder_type_id: number;
+    quantity: number;
+    total: number;
+    payment_method: string;
+    is_exchange: number;
+    voided_at: string | null;
+  }>(
+    `SELECT id, customer_id, cylinder_type_id, quantity, total,
+            payment_method, is_exchange, voided_at
+     FROM sales WHERE uuid = ?`,
+    [d.id]
+  );
+
+  // UUID desconhecido → no-op.
+  if (!sale) return;
+
+  // Já ativa → no-op (idempotência; a re-aplicação só ocorre uma vez).
+  if (sale.voided_at === null) return;
+
+  // Limpa voided_at.
+  await db.runAsync(`UPDATE sales SET voided_at = NULL WHERE id = ?`, [sale.id]);
+
+  // Re-aplica como applySale: full_qty -= quantity; empty_qty += qty (se troca).
+  // Sem clamp — simétrico ao applySale e à paridade com o backend.
+  await db.runAsync(
+    `UPDATE inventory
+     SET full_qty  = full_qty - ?,
+         empty_qty = empty_qty + ?
+     WHERE cylinder_type_id = ?`,
+    [sale.quantity, sale.is_exchange ? sale.quantity : 0, sale.cylinder_type_id]
+  );
+
+  // Re-aplica balanço se fiado + cliente vinculado.
+  // Convenção local: venda fiado → balance - total (dívida volta).
+  if (sale.payment_method === "fiado" && sale.customer_id !== null) {
+    await db.runAsync(
+      `UPDATE customers SET balance = balance - ? WHERE id = ?`,
       [sale.total, sale.customer_id]
     );
   }

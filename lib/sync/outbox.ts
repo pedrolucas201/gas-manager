@@ -10,6 +10,7 @@ export type OutboxKind =
   | "stock_set"
   | "debt_settlement"
   | "void_sale"
+  | "unvoid_sale"
   | "customer_upsert"
   | "customer_delete"
   | "cylinder_upsert"

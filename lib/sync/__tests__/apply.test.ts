@@ -538,6 +538,149 @@ describe("applyEvent — void_sale (reversão de venda já local)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Testes: unvoid_sale (restaura venda previamente anulada)
+// ---------------------------------------------------------------------------
+
+describe("applyEvent — unvoid_sale (restauração de venda anulada)", () => {
+  it("restaura venda cash: re-aplica inventário uma única vez", async () => {
+    const db = await freshDb();
+    await setInventory(db, 10, 0);
+
+    await applyEvent(db, makeSaleEvent({ uuid: "s-unvoid-cash", quantity: 3 }));
+    await applyEvent(db, {
+      kind: "void_sale",
+      sequence: 2,
+      server_received_at: "2026-06-18T12:00:00Z",
+      data: { id: "s-unvoid-cash" },
+    });
+    expect((await getInventory(db)).full_qty).toBe(10); // anulada
+
+    await applyEvent(db, {
+      kind: "unvoid_sale",
+      sequence: 3,
+      server_received_at: "2026-06-18T13:00:00Z",
+      data: { id: "s-unvoid-cash" },
+    });
+
+    expect((await getInventory(db)).full_qty).toBe(7); // re-aplicada
+    const sale = await db.getFirstAsync<{ voided_at: string | null }>(
+      `SELECT voided_at FROM sales WHERE uuid = ?`,
+      ["s-unvoid-cash"]
+    );
+    expect(sale?.voided_at).toBeNull();
+  });
+
+  it("restaura venda fiado: re-aplica dívida do cliente", async () => {
+    const db = await freshDb();
+    const custUuid = "cust-unvoid-fiado";
+    const custId = await seedCustomer(db, custUuid, "Fiado Unvoid", 0);
+    await setInventory(db, 10, 0);
+
+    await applyEvent(
+      db,
+      makeSaleEvent({
+        uuid: "s-unvoid-fiado",
+        customerUuid: custUuid,
+        paymentMethod: "fiado",
+        total: "120.00",
+        quantity: 1,
+      })
+    );
+    await applyEvent(db, {
+      kind: "void_sale",
+      sequence: 2,
+      server_received_at: "2026-06-18T12:00:00Z",
+      data: { id: "s-unvoid-fiado" },
+    });
+    expect(await getBalance(db, custId)).toBeCloseTo(0, 5);
+
+    await applyEvent(db, {
+      kind: "unvoid_sale",
+      sequence: 3,
+      server_received_at: "2026-06-18T13:00:00Z",
+      data: { id: "s-unvoid-fiado" },
+    });
+
+    expect(await getBalance(db, custId)).toBeCloseTo(-120, 5);
+  });
+
+  it("restaura venda com troca: re-aplica empty_qty também", async () => {
+    const db = await freshDb();
+    await setInventory(db, 10, 0);
+
+    await applyEvent(
+      db,
+      makeSaleEvent({ uuid: "s-unvoid-exch", quantity: 2, isExchange: true })
+    );
+    await applyEvent(db, {
+      kind: "void_sale",
+      sequence: 2,
+      server_received_at: "2026-06-18T12:00:00Z",
+      data: { id: "s-unvoid-exch" },
+    });
+    expect(await getInventory(db)).toEqual({ full_qty: 10, empty_qty: 0 });
+
+    await applyEvent(db, {
+      kind: "unvoid_sale",
+      sequence: 3,
+      server_received_at: "2026-06-18T13:00:00Z",
+      data: { id: "s-unvoid-exch" },
+    });
+
+    expect(await getInventory(db)).toEqual({ full_qty: 8, empty_qty: 2 });
+  });
+
+  it("unvoid_sale idempotente: aplicar duas vezes re-aplica só uma vez", async () => {
+    const db = await freshDb();
+    await setInventory(db, 10, 0);
+    await applyEvent(db, makeSaleEvent({ uuid: "s-unvoid-idem", quantity: 1 }));
+    await applyEvent(db, {
+      kind: "void_sale",
+      sequence: 2,
+      server_received_at: "2026-06-18T12:00:00Z",
+      data: { id: "s-unvoid-idem" },
+    });
+
+    const unvoidEv = {
+      kind: "unvoid_sale" as const,
+      sequence: 3,
+      server_received_at: "2026-06-18T13:00:00Z",
+      data: { id: "s-unvoid-idem" },
+    };
+    await applyEvent(db, unvoidEv);
+    await applyEvent(db, unvoidEv); // segunda vez: no-op (já ativa)
+
+    expect((await getInventory(db)).full_qty).toBe(9); // re-aplicou uma vez só
+  });
+
+  it("unvoid_sale numa venda ativa é no-op", async () => {
+    const db = await freshDb();
+    await setInventory(db, 10, 0);
+    await applyEvent(db, makeSaleEvent({ uuid: "s-active", quantity: 1 }));
+    // venda nunca anulada
+    await applyEvent(db, {
+      kind: "unvoid_sale",
+      sequence: 3,
+      server_received_at: "2026-06-18T13:00:00Z",
+      data: { id: "s-active" },
+    });
+    expect((await getInventory(db)).full_qty).toBe(9); // inalterado
+  });
+
+  it("unvoid_sale para uuid desconhecido é no-op (não lança erro)", async () => {
+    const db = await freshDb();
+    await expect(
+      applyEvent(db, {
+        kind: "unvoid_sale",
+        sequence: 1,
+        server_received_at: "2026-06-18T10:00:00Z",
+        data: { id: "uuid-nao-existe" },
+      })
+    ).resolves.not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Testes: restock
 // ---------------------------------------------------------------------------
 

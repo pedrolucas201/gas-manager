@@ -13,6 +13,7 @@ import {
   deleteCustomer,
   upsertCylinderType,
   voidSale,
+  unvoidSale,
   AuthError,
   NetworkError,
   ApiError,
@@ -348,6 +349,26 @@ describe("voidSale", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${BASE}/sync/void-sale`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ id: "sale-uuid" });
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe(
+      "Bearer test-id-token"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// unvoidSale
+// ---------------------------------------------------------------------------
+
+describe("unvoidSale", () => {
+  it("POST /sync/unvoid-sale com body {id}", async () => {
+    const fetchMock = mockFetch(200, { status: "unvoided" });
+
+    await unvoidSale("sale-uuid");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/sync/unvoid-sale`);
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ id: "sale-uuid" });
     expect((init.headers as Record<string, string>)["Authorization"]).toBe(

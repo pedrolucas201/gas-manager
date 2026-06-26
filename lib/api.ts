@@ -280,3 +280,11 @@ export async function upsertCylinderType(
 export async function voidSale(id: string): Promise<{ status: string }> {
   return request<{ status: string }>("POST", "/sync/void-sale", { id });
 }
+
+/**
+ * POST /sync/unvoid-sale — restaura uma venda anulada pelo ID.
+ * Retorna { status: "unvoided" } do servidor.
+ */
+export async function unvoidSale(id: string): Promise<{ status: string }> {
+  return request<{ status: string }>("POST", "/sync/unvoid-sale", { id });
+}
