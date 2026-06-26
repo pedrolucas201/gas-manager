@@ -10,6 +10,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 const mockPushEvents = jest.fn();
 const mockVoidSale = jest.fn();
+const mockUnvoidSale = jest.fn();
 const mockUpsertCustomer = jest.fn();
 const mockDeleteCustomer = jest.fn();
 const mockUpsertCylinderType = jest.fn();
@@ -31,6 +32,7 @@ jest.mock("@/lib/api", () => {
   return {
     pushEvents: (...a: unknown[]) => mockPushEvents(...a),
     voidSale: (...a: unknown[]) => mockVoidSale(...a),
+    unvoidSale: (...a: unknown[]) => mockUnvoidSale(...a),
     upsertCustomer: (...a: unknown[]) => mockUpsertCustomer(...a),
     deleteCustomer: (...a: unknown[]) => mockDeleteCustomer(...a),
     upsertCylinderType: (...a: unknown[]) => mockUpsertCylinderType(...a),
@@ -93,6 +95,7 @@ describe("SyncEngine.pushOnce", () => {
       { id: "sale-uuid-push-1", status: "applied" },
     ]);
     mockVoidSale.mockResolvedValue(undefined);
+    mockUnvoidSale.mockResolvedValue(undefined);
     mockUpsertCustomer.mockResolvedValue(undefined);
     mockDeleteCustomer.mockResolvedValue(undefined);
     mockUpsertCylinderType.mockResolvedValue(undefined);
@@ -142,6 +145,46 @@ describe("SyncEngine.pushOnce", () => {
       `SELECT status FROM sync_outbox WHERE event_uuid = 'void-uuid-1'`
     );
     expect(row?.status).toBe("done");
+  });
+
+  it("unvoid_sale chama unvoidSale (endpoint individual) e marca done", async () => {
+    const db = await freshDb();
+    await enqueue(db, {
+      event_uuid: "unvoid-uuid-1",
+      kind: "unvoid_sale",
+      payload: JSON.stringify({ id: "sale-ref-uuid" }),
+      client_created_at: new Date().toISOString(),
+    });
+    await new SyncEngine(db).pushOnce();
+    expect(mockUnvoidSale).toHaveBeenCalledWith("sale-ref-uuid");
+    const row = await db.getFirstAsync<{ status: string }>(
+      `SELECT status FROM sync_outbox WHERE event_uuid = 'unvoid-uuid-1'`
+    );
+    expect(row?.status).toBe("done");
+  });
+
+  it("envia unvoid_sale DEPOIS dos voids", async () => {
+    const db = await freshDb();
+    const order: string[] = [];
+    mockVoidSale.mockImplementation(async () => { order.push("void"); });
+    mockUnvoidSale.mockImplementation(async () => { order.push("unvoid"); });
+
+    await enqueue(db, {
+      event_uuid: "void-uuid-3",
+      kind: "void_sale",
+      payload: JSON.stringify({ id: "sale-a" }),
+      client_created_at: new Date().toISOString(),
+    });
+    await enqueue(db, {
+      event_uuid: "unvoid-uuid-3",
+      kind: "unvoid_sale",
+      payload: JSON.stringify({ id: "sale-b" }),
+      client_created_at: new Date().toISOString(),
+    });
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(order).toEqual(["void", "unvoid"]);
   });
 
   it("customer_upsert chama upsertCustomer e marca done", async () => {

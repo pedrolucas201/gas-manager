@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import {
   pushEvents,
   voidSale,
+  unvoidSale,
   upsertCustomer,
   deleteCustomer,
   upsertCylinderType,
@@ -83,6 +84,7 @@ export class SyncEngine {
     const catalog = events.filter((e) => CATALOG_KINDS.has(e.kind));
     const facts = events.filter((e) => FACT_KINDS.has(e.kind));
     const voids = events.filter((e) => e.kind === "void_sale");
+    const unvoids = events.filter((e) => e.kind === "unvoid_sale");
 
     // 1. Catalog first.
     if (await this._pushIndividual(catalog)) return;
@@ -90,6 +92,8 @@ export class SyncEngine {
     if (await this._pushFacts(facts)) return;
     // 3. Voids last.
     if (await this._pushIndividual(voids)) return;
+    // 4. Unvoids depois dos voids (ordem causal consistente).
+    if (await this._pushIndividual(unvoids)) return;
 
     const count = await getOutboxCount(this.db);
     useSyncStore.getState().setPendingCount(count);
@@ -159,6 +163,9 @@ export class SyncEngine {
     switch (event.kind) {
       case "void_sale":
         await voidSale(payload.id);
+        break;
+      case "unvoid_sale":
+        await unvoidSale(payload.id);
         break;
       case "customer_upsert":
         await upsertCustomer(payload);
