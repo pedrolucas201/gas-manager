@@ -125,8 +125,15 @@ export default function SalesScreen() {
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f97316" />}
         ListHeaderComponent={
-          <View className="px-4 pt-4 pb-3">
+          <View className="px-4 pt-4 pb-3 flex-row items-center justify-between">
             <Text className="text-lg font-bold text-gray-900 dark:text-gray-50">Últimas Vendas</Text>
+            <TouchableOpacity
+              className="flex-row items-center gap-1"
+              onPress={() => router.push("/voided-sales")}
+            >
+              <Ionicons name="trash-bin-outline" size={14} color="#f97316" />
+              <Text className="text-primary-500 font-medium text-sm">Canceladas</Text>
+            </TouchableOpacity>
           </View>
         }
         ListEmptyComponent={

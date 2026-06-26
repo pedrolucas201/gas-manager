@@ -98,6 +98,20 @@ export default function RootLayout() {
                   headerTitleStyle: { fontWeight: "700" },
                 }}
               />
+              <Stack.Screen
+                name="voided-sales"
+                options={{
+                  headerShown: true,
+                  title: "Vendas Canceladas",
+                }}
+              />
+              <Stack.Screen
+                name="pending-voids"
+                options={{
+                  headerShown: true,
+                  title: "Revisar Cancelamentos",
+                }}
+              />
             </Stack>
           </AuthGate>
         </SQLiteProvider>
