@@ -90,6 +90,7 @@ func newRouter(
 		r.Use(authMW)
 		r.Post("/sync/push", syncSvc.HandlePush)
 		r.Post("/sync/void-sale", syncSvc.HandleVoidSale)
+		r.Post("/sync/unvoid-sale", syncSvc.HandleUnvoidSale)
 		r.Get("/sync/pull", syncSvc.HandlePull)
 		r.Get("/sync/errors", syncSvc.HandleSyncErrors)
 		r.Put("/catalog/customers", catalogSvc.HandleUpsertCustomer)

@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyStockSet = `-- name: ApplyStockSet :exec
+UPDATE inventory
+SET full_qty   = $1::int,
+    empty_qty  = $2::int,
+    last_set_at = $3::timestamptz
+WHERE cylinder_type_id = $4
+  AND (last_set_at IS NULL OR $3::timestamptz > last_set_at)
+`
+
+type ApplyStockSetParams struct {
+	FullQty         int32
+	EmptyQty        int32
+	ClientCreatedAt pgtype.Timestamptz
+	CylinderTypeID  pgtype.UUID
+}
+
+func (q *Queries) ApplyStockSet(ctx context.Context, arg ApplyStockSetParams) error {
+	_, err := q.db.Exec(ctx, applyStockSet,
+		arg.FullQty,
+		arg.EmptyQty,
+		arg.ClientCreatedAt,
+		arg.CylinderTypeID,
+	)
+	return err
+}
+
 const bumpCustomerBalance = `-- name: BumpCustomerBalance :exec
 UPDATE customers SET balance = balance + $2 WHERE id = $1
 `
@@ -150,6 +176,22 @@ type GetStockAdjustmentByIDRow struct {
 func (q *Queries) GetStockAdjustmentByID(ctx context.Context, id pgtype.UUID) (GetStockAdjustmentByIDRow, error) {
 	row := q.db.QueryRow(ctx, getStockAdjustmentByID, id)
 	var i GetStockAdjustmentByIDRow
+	err := row.Scan(&i.ID, &i.PayloadHash)
+	return i, err
+}
+
+const getStockSetByID = `-- name: GetStockSetByID :one
+SELECT id, payload_hash FROM stock_sets WHERE id = $1
+`
+
+type GetStockSetByIDRow struct {
+	ID          pgtype.UUID
+	PayloadHash string
+}
+
+func (q *Queries) GetStockSetByID(ctx context.Context, id pgtype.UUID) (GetStockSetByIDRow, error) {
+	row := q.db.QueryRow(ctx, getStockSetByID, id)
+	var i GetStockSetByIDRow
 	err := row.Scan(&i.ID, &i.PayloadHash)
 	return i, err
 }
@@ -372,6 +414,42 @@ func (q *Queries) InsertStockAdjustment(ctx context.Context, arg InsertStockAdju
 		arg.ClientCreatedAt,
 	)
 	var i InsertStockAdjustmentRow
+	err := row.Scan(&i.Sequence, &i.ServerReceivedAt)
+	return i, err
+}
+
+const insertStockSet = `-- name: InsertStockSet :one
+INSERT INTO stock_sets (id, cylinder_type_id, full_qty, empty_qty, payload_hash, created_by, client_created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING sequence, server_received_at
+`
+
+type InsertStockSetParams struct {
+	ID              pgtype.UUID
+	CylinderTypeID  pgtype.UUID
+	FullQty         int32
+	EmptyQty        int32
+	PayloadHash     string
+	CreatedBy       string
+	ClientCreatedAt pgtype.Timestamptz
+}
+
+type InsertStockSetRow struct {
+	Sequence         int64
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertStockSet(ctx context.Context, arg InsertStockSetParams) (InsertStockSetRow, error) {
+	row := q.db.QueryRow(ctx, insertStockSet,
+		arg.ID,
+		arg.CylinderTypeID,
+		arg.FullQty,
+		arg.EmptyQty,
+		arg.PayloadHash,
+		arg.CreatedBy,
+		arg.ClientCreatedAt,
+	)
+	var i InsertStockSetRow
 	err := row.Scan(&i.Sequence, &i.ServerReceivedAt)
 	return i, err
 }
@@ -673,84 +751,6 @@ func (q *Queries) PullStockAdjustments(ctx context.Context, arg PullStockAdjustm
 	return items, nil
 }
 
-const getStockSetByID = `-- name: GetStockSetByID :one
-SELECT id, payload_hash FROM stock_sets WHERE id = $1
-`
-
-type GetStockSetByIDRow struct {
-	ID          pgtype.UUID
-	PayloadHash string
-}
-
-func (q *Queries) GetStockSetByID(ctx context.Context, id pgtype.UUID) (GetStockSetByIDRow, error) {
-	row := q.db.QueryRow(ctx, getStockSetByID, id)
-	var i GetStockSetByIDRow
-	err := row.Scan(&i.ID, &i.PayloadHash)
-	return i, err
-}
-
-const insertStockSet = `-- name: InsertStockSet :one
-INSERT INTO stock_sets (id, cylinder_type_id, full_qty, empty_qty, payload_hash, created_by, client_created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7)
-RETURNING sequence, server_received_at
-`
-
-type InsertStockSetParams struct {
-	ID              pgtype.UUID
-	CylinderTypeID  pgtype.UUID
-	FullQty         int32
-	EmptyQty        int32
-	PayloadHash     string
-	CreatedBy       string
-	ClientCreatedAt pgtype.Timestamptz
-}
-
-type InsertStockSetRow struct {
-	Sequence         int64
-	ServerReceivedAt pgtype.Timestamptz
-}
-
-func (q *Queries) InsertStockSet(ctx context.Context, arg InsertStockSetParams) (InsertStockSetRow, error) {
-	row := q.db.QueryRow(ctx, insertStockSet,
-		arg.ID,
-		arg.CylinderTypeID,
-		arg.FullQty,
-		arg.EmptyQty,
-		arg.PayloadHash,
-		arg.CreatedBy,
-		arg.ClientCreatedAt,
-	)
-	var i InsertStockSetRow
-	err := row.Scan(&i.Sequence, &i.ServerReceivedAt)
-	return i, err
-}
-
-const applyStockSet = `-- name: ApplyStockSet :exec
-UPDATE inventory
-SET full_qty    = $1::int,
-    empty_qty   = $2::int,
-    last_set_at = $3::timestamptz
-WHERE cylinder_type_id = $4
-  AND (last_set_at IS NULL OR $3::timestamptz > last_set_at)
-`
-
-type ApplyStockSetParams struct {
-	FullQty         int32
-	EmptyQty        int32
-	ClientCreatedAt pgtype.Timestamptz
-	CylinderTypeID  pgtype.UUID
-}
-
-func (q *Queries) ApplyStockSet(ctx context.Context, arg ApplyStockSetParams) error {
-	_, err := q.db.Exec(ctx, applyStockSet,
-		arg.FullQty,
-		arg.EmptyQty,
-		arg.ClientCreatedAt,
-		arg.CylinderTypeID,
-	)
-	return err
-}
-
 const pullStockSets = `-- name: PullStockSets :many
 SELECT id, cylinder_type_id, full_qty, empty_qty, client_created_at, server_received_at, sequence
 FROM stock_sets WHERE sequence > $1 ORDER BY sequence LIMIT $2
@@ -828,6 +828,35 @@ type ReverseInventoryForSaleParams struct {
 func (q *Queries) ReverseInventoryForSale(ctx context.Context, arg ReverseInventoryForSaleParams) error {
 	_, err := q.db.Exec(ctx, reverseInventoryForSale, arg.Quantity, arg.IsExchange, arg.CylinderTypeID)
 	return err
+}
+
+const unvoidSale = `-- name: UnvoidSale :one
+UPDATE sales SET voided_at = NULL, voided_by = NULL
+WHERE id = $1 AND voided_at IS NOT NULL
+RETURNING quantity, is_exchange, payment_method, customer_id, total, cylinder_type_id
+`
+
+type UnvoidSaleRow struct {
+	Quantity       int32
+	IsExchange     bool
+	PaymentMethod  string
+	CustomerID     pgtype.UUID
+	Total          pgtype.Numeric
+	CylinderTypeID pgtype.UUID
+}
+
+func (q *Queries) UnvoidSale(ctx context.Context, id pgtype.UUID) (UnvoidSaleRow, error) {
+	row := q.db.QueryRow(ctx, unvoidSale, id)
+	var i UnvoidSaleRow
+	err := row.Scan(
+		&i.Quantity,
+		&i.IsExchange,
+		&i.PaymentMethod,
+		&i.CustomerID,
+		&i.Total,
+		&i.CylinderTypeID,
+	)
+	return i, err
 }
 
 const voidSale = `-- name: VoidSale :one

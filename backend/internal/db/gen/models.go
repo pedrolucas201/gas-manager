@@ -66,6 +66,7 @@ type Inventory struct {
 	CylinderTypeID pgtype.UUID
 	FullQty        int32
 	EmptyQty       int32
+	LastSetAt      pgtype.Timestamptz
 }
 
 type Restock struct {
@@ -114,6 +115,18 @@ type StockAdjustment struct {
 	Field            string
 	Delta            int32
 	Reason           *string
+	PayloadHash      string
+	CreatedBy        string
+	ClientCreatedAt  pgtype.Timestamptz
+	ServerReceivedAt pgtype.Timestamptz
+	Sequence         int64
+}
+
+type StockSet struct {
+	ID               pgtype.UUID
+	CylinderTypeID   pgtype.UUID
+	FullQty          int32
+	EmptyQty         int32
 	PayloadHash      string
 	CreatedBy        string
 	ClientCreatedAt  pgtype.Timestamptz

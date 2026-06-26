@@ -28,6 +28,11 @@ WHERE cylinder_type_id = sqlc.arg(cylinder_type_id);
 -- name: ReverseCustomerBalance :exec
 UPDATE customers SET balance = balance - sqlc.arg(amount) WHERE id = sqlc.arg(id);
 
+-- name: UnvoidSale :one
+UPDATE sales SET voided_at = NULL, voided_by = NULL
+WHERE id = sqlc.arg(id) AND voided_at IS NOT NULL
+RETURNING quantity, is_exchange, payment_method, customer_id, total, cylinder_type_id;
+
 -- name: GetRestockByID :one
 SELECT id, payload_hash FROM restocks WHERE id = $1;
 
