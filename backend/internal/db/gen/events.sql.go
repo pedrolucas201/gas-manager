@@ -357,8 +357,30 @@ func (q *Queries) InsertSale(ctx context.Context, arg InsertSaleParams) (InsertS
 	return i, err
 }
 
+const insertSaleUnvoid = `-- name: InsertSaleUnvoid :one
+INSERT INTO sale_voids (sale_id, voided_by, kind) VALUES ($1, $2, 'unvoid')
+RETURNING id, server_received_at
+`
+
+type InsertSaleUnvoidParams struct {
+	SaleID   pgtype.UUID
+	VoidedBy string
+}
+
+type InsertSaleUnvoidRow struct {
+	ID               int64
+	ServerReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertSaleUnvoid(ctx context.Context, arg InsertSaleUnvoidParams) (InsertSaleUnvoidRow, error) {
+	row := q.db.QueryRow(ctx, insertSaleUnvoid, arg.SaleID, arg.VoidedBy)
+	var i InsertSaleUnvoidRow
+	err := row.Scan(&i.ID, &i.ServerReceivedAt)
+	return i, err
+}
+
 const insertSaleVoid = `-- name: InsertSaleVoid :one
-INSERT INTO sale_voids (sale_id, voided_by) VALUES ($1, $2)
+INSERT INTO sale_voids (sale_id, voided_by, kind) VALUES ($1, $2, 'void')
 RETURNING id, server_received_at
 `
 
@@ -604,7 +626,7 @@ func (q *Queries) PullRestocks(ctx context.Context, arg PullRestocksParams) ([]P
 }
 
 const pullSaleVoids = `-- name: PullSaleVoids :many
-SELECT id, sale_id, server_received_at
+SELECT id, sale_id, kind, server_received_at
 FROM sale_voids
 WHERE id > $1
 ORDER BY id
@@ -619,6 +641,7 @@ type PullSaleVoidsParams struct {
 type PullSaleVoidsRow struct {
 	ID               int64
 	SaleID           pgtype.UUID
+	Kind             string
 	ServerReceivedAt pgtype.Timestamptz
 }
 
@@ -631,7 +654,12 @@ func (q *Queries) PullSaleVoids(ctx context.Context, arg PullSaleVoidsParams) ([
 	var items []PullSaleVoidsRow
 	for rows.Next() {
 		var i PullSaleVoidsRow
-		if err := rows.Scan(&i.ID, &i.SaleID, &i.ServerReceivedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.SaleID,
+			&i.Kind,
+			&i.ServerReceivedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

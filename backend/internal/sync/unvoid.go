@@ -61,9 +61,12 @@ func (s *Service) UnvoidSale(ctx context.Context, userID, saleID string) error {
 		}
 	}
 
-	data, _ := json.Marshal(map[string]any{"id": saleID})
-	if _, err := q.InsertCatalogEvent(ctx, gen.InsertCatalogEventParams{
-		Kind: "unvoid_sale", RefID: id, Data: string(data),
+	// Append to the same sale_voids stream as the void (kind='unvoid'), so void
+	// and unvoid share one monotonic sequence and converge in causal order on
+	// every device's pull.
+	if _, err := q.InsertSaleUnvoid(ctx, gen.InsertSaleUnvoidParams{
+		SaleID:   id,
+		VoidedBy: userID,
 	}); err != nil {
 		return err
 	}

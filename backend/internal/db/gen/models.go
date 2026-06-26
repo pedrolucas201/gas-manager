@@ -107,6 +107,7 @@ type SaleVoid struct {
 	SaleID           pgtype.UUID
 	VoidedBy         string
 	ServerReceivedAt pgtype.Timestamptz
+	Kind             string
 }
 
 type StockAdjustment struct {

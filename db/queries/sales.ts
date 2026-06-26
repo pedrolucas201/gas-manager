@@ -205,11 +205,16 @@ export async function discardPendingVoid(
   saleId: number
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
+    const res = await db.runAsync(
       `DELETE FROM sync_outbox WHERE event_uuid = ? AND status = 'pending'`,
       [eventUuid]
     );
-    await restoreSaleAggregates(db, saleId);
+    // Só restaura se o void ainda estava pendente. Se já foi enviado (changes==0),
+    // restaurar localmente sem propagar criaria divergência (servidor anulado /
+    // local ativo) — nesse caso o caminho correto é unvoidSale (que propaga).
+    if (res.changes > 0) {
+      await restoreSaleAggregates(db, saleId);
+    }
   });
 }
 

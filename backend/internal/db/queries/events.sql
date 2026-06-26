@@ -88,11 +88,15 @@ SELECT id, customer_id, amount, payment_method, server_received_at, client_creat
 FROM debt_settlements WHERE sequence > $1 ORDER BY sequence LIMIT $2;
 
 -- name: InsertSaleVoid :one
-INSERT INTO sale_voids (sale_id, voided_by) VALUES ($1, $2)
+INSERT INTO sale_voids (sale_id, voided_by, kind) VALUES ($1, $2, 'void')
+RETURNING id, server_received_at;
+
+-- name: InsertSaleUnvoid :one
+INSERT INTO sale_voids (sale_id, voided_by, kind) VALUES ($1, $2, 'unvoid')
 RETURNING id, server_received_at;
 
 -- name: PullSaleVoids :many
-SELECT id, sale_id, server_received_at
+SELECT id, sale_id, kind, server_received_at
 FROM sale_voids
 WHERE id > $1
 ORDER BY id

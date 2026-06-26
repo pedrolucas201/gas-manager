@@ -56,7 +56,6 @@ func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
 	for _, name := range []string{
 		"0001_init.up.sql",
 		"0005_catalog_events.up.sql",
-		"0008_catalog_unvoid.up.sql",
 	} {
 		path := filepath.Join("..", "db", "migrations", name)
 		b, err := os.ReadFile(path)

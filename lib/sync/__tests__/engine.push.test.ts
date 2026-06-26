@@ -312,6 +312,10 @@ describe("SyncEngine — disjuntor de cancelamento em massa", () => {
     const api = jest.requireMock("@/lib/api");
     api.pullPage.mockResolvedValue({ events: [], next_cursor: "", has_more: false });
     mockVoidSale.mockResolvedValue(undefined);
+    mockUnvoidSale.mockResolvedValue(undefined);
+    // clearAllMocks não remove implementações; o último teste do describe acima
+    // deixou mockPushEvents rejeitando. Restaura um push de fato bem-sucedido.
+    mockPushEvents.mockResolvedValue([{ id: "sale-uuid-push-1", status: "applied" }]);
   });
 
   async function enqueueVoid(db: SQLiteDatabase, n: number) {
@@ -364,6 +368,42 @@ describe("SyncEngine — disjuntor de cancelamento em massa", () => {
 
     expect(mockVoidSale).toHaveBeenCalledTimes(2);
     expect(useSyncStore.getState().voidConfirmNeeded).toBe(0);
+  });
+
+  it("a aprovação é one-shot: um NOVO lote >= limite bloqueia de novo", async () => {
+    const db = await freshDb();
+    const engine = new SyncEngine(db);
+
+    for (let i = 0; i < 3; i++) await enqueueVoid(db, i);
+    await engine.pushOnce();
+    await engine.approveVoidBatch(); // envia o 1º lote
+    expect(mockVoidSale).toHaveBeenCalledTimes(3);
+
+    // Novo lote de 3 cancelamentos deve voltar a exigir confirmação.
+    for (let i = 10; i < 13; i++) await enqueueVoid(db, i);
+    await engine.pushOnce();
+
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(3);
+    expect(mockVoidSale).toHaveBeenCalledTimes(3); // nada novo enviado sem aprovar
+  });
+
+  it("com gate ativo, catálogo e fatos AINDA são enviados; unvoids ficam represados", async () => {
+    const db = await freshDb();
+    await enqueueFact(db); // 1 fato
+    for (let i = 0; i < 3; i++) await enqueueVoid(db, i); // dispara o gate
+    await enqueue(db, {
+      event_uuid: "unvoid-gated",
+      kind: "unvoid_sale",
+      payload: JSON.stringify({ id: "sale-x" }),
+      client_created_at: new Date().toISOString(),
+    });
+
+    await new SyncEngine(db).pushOnce();
+
+    expect(mockPushEvents).toHaveBeenCalledTimes(1); // fato enviado
+    expect(mockVoidSale).not.toHaveBeenCalled();
+    expect(mockUnvoidSale).not.toHaveBeenCalled(); // unvoid represado com os voids
+    expect(useSyncStore.getState().voidConfirmNeeded).toBe(3);
   });
 });
 

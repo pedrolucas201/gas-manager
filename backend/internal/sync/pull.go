@@ -103,7 +103,11 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 		anyFull = true
 	}
 	for _, r := range voids {
-		events = append(events, Event{Kind: "void_sale", Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapVoidRow(r)})
+		kind := "void_sale"
+		if r.Kind == "unvoid" {
+			kind = "unvoid_sale"
+		}
+		events = append(events, Event{Kind: kind, Sequence: r.ID, ServerReceivedAt: toTime(r.ServerReceivedAt), Data: mapVoidRow(r)})
 	}
 
 	catalogEvts, err := q.PullCatalogEvents(ctx, gen.PullCatalogEventsParams{ID: c.Catalog, Limit: limit})
@@ -170,7 +174,8 @@ func (s *Service) Pull(ctx context.Context, c Cursor, limit int32) (PullPage, er
 			if e.Sequence > next.Settle {
 				next.Settle = e.Sequence
 			}
-		case "void_sale":
+		case "void_sale", "unvoid_sale":
+			// Ambos vêm de sale_voids → mesmo cursor Void (sequência única).
 			if e.Sequence > next.Void {
 				next.Void = e.Sequence
 			}
