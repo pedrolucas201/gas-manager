@@ -20,6 +20,10 @@ export interface SummaryData {
   profit: number
   expenses: number
   net_flow: number
+  // Regime de caixa: dinheiro que de fato entrou no período.
+  cash_sales: number // vendas à vista (cash/pix/card, exclui fiado)
+  settlements_received: number // vales recebidos
+  caixa: number // cash_sales + settlements_received − expenses
 }
 
 export interface SalesDayRow {

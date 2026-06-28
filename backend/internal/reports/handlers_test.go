@@ -36,6 +36,43 @@ func TestSummary_Aggregates(t *testing.T) {
 	}
 }
 
+func TestSummary_Caixa(t *testing.T) {
+	pool := newTestDB(t)
+	svc := NewService(pool)
+	ctx := context.Background()
+
+	// 3 vendas à vista (cash/pix/card) + 1 fiado (não entra no caixa).
+	insertSaleM(t, pool, "aaaaaaaa-0000-0000-0000-0000000000a1", 1, 120, 90, "cash")
+	insertSaleM(t, pool, "aaaaaaaa-0000-0000-0000-0000000000a2", 1, 120, 90, "pix")
+	insertSaleM(t, pool, "aaaaaaaa-0000-0000-0000-0000000000a3", 1, 120, 90, "card")
+	insertSaleM(t, pool, "aaaaaaaa-0000-0000-0000-0000000000a4", 1, 120, 90, "fiado")
+	// 2 vales recebidos.
+	insertSettlement(t, pool, "dddddddd-0000-0000-0000-0000000000d1", 50, "cash")
+	insertSettlement(t, pool, "dddddddd-0000-0000-0000-0000000000d2", 30, "pix")
+	// 1 despesa.
+	insertExpense(t, pool, "bbbbbbbb-0000-0000-0000-0000000000b1", "Gasolina", 40)
+
+	from := time.Now().AddDate(0, -1, 0)
+	to := time.Now().AddDate(0, 1, 0)
+
+	got, err := svc.Summary(ctx, from, to)
+	if err != nil {
+		t.Fatalf("Summary: %v", err)
+	}
+	if got.Revenue != 480 {
+		t.Errorf("revenue want 480 (inclui fiado), got %v", got.Revenue)
+	}
+	if got.CashSales != 360 {
+		t.Errorf("cash_sales want 360 (cash+pix+card), got %v", got.CashSales)
+	}
+	if got.SettlementsReceived != 80 {
+		t.Errorf("settlements_received want 80, got %v", got.SettlementsReceived)
+	}
+	if got.Caixa != 400 { // 360 à vista + 80 vales - 40 despesas
+		t.Errorf("caixa want 400, got %v", got.Caixa)
+	}
+}
+
 func TestSales_ReturnsList(t *testing.T) {
 	pool := newTestDB(t)
 	svc := NewService(pool)

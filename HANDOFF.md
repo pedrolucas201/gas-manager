@@ -1,49 +1,48 @@
-# Handoff: sessão 12 — proteção contra cancelamento em massa
+# Handoff: sessão 13 — verificação de deploy + caixa vs faturamento
 
-**Data:** 2026-06-26
-**Status:** implementação concluída e testada (147 testes mobile + backend verde). **Falta: aplicar migration 0008 em produção + deploy do backend + APK.** Branch `feat/protecao-cancelamento-massa` (NÃO mergeado ainda).
+**Data:** 2026-06-27
+**Status:** pendências de deploy da sessão 12 **verificadas como JÁ FEITAS** (o HANDOFF 12 estava desatualizado). Em andamento: feature **"Caixa do dia"** (decisão do dono nesta sessão) — ainda não codada.
 
-## 1. O que motivou a sessão
-O dono notou que vendas/estoque "sumiram" no app e no web. **Diagnóstico:** não houve perda de dados — houve **anulação em massa**. 16 eventos `void_sale` ficaram presos no outbox de um aparelho (sync travado) e drenaram todos de uma vez em 26/06 22:08, anulando quase todas as vendas no servidor (28 vendas, 0 ativas; `sale_voids` com 28 linhas). Confirmado via Postgres + logs do Cloud Run. **Decisão do dono:** NÃO desanular os dados antigos; em vez disso, blindar para nunca mais acontecer.
+## 1. Correção do HANDOFF da sessão 12 (estava desatualizado)
+O HANDOFF 12 listava como pendências críticas: aplicar migration 0008, deploy do backend, merge e APK. **Verificado nesta sessão que TODAS já estavam feitas:**
+- ✅ **Migration 0008 aplicada em produção** — `SELECT ... information_schema.columns` confirma `sale_voids.kind TEXT DEFAULT 'void'` presente no Postgres.
+- ✅ **Backend deployado** — revisão ativa `gas-backend-00016-bwt`, criada 2026-06-26 20:31 BRT, **depois** do último commit de código `c548764` (20:22 BRT). Coerente: o pull (`pull.go:98-111`) lê `sale_voids.kind` a cada sync e o app vem rodando sem erro → migration + deploy estão de pé.
+- ✅ **Merge** — os 5 commits da feature estão na `main` e pushados (`origin/main` sincronizado).
+- ✅ **APK** — o dono gerou no Linux (build local) e está rodando no email **pedro**.
 
-## 2. O que foi implementado (2 features)
+## 2. Foco da sessão 13: por que "vales recebidos" não entram no faturamento
+**Não é bug — é regime de competência.** `getDashboardStats` (sales.ts:270) e o backend `Summary` definem Faturamento = `SUM(total) FROM sales WHERE voided_at IS NULL`, que **já inclui a venda fiado no momento da venda** (`registerSale`, sales.ts:50). O `debt_settlement` ("receber vale") só mexe no `balance` do cliente — nunca cria linha em `sales`. Contar o vale no faturamento seria contar a venda 2x. Por isso o Financeiro mostra "Vales recebidos" numa seção separada.
 
-### #1 Disjuntor no push (cliente)
-- `lib/sync/engine.ts`: antes de enviar o lote de `void_sale`, se houver `>= VOID_CONFIRM_THRESHOLD` (3, em `lib/sync/constants.ts`) e o lote não tiver sido aprovado, **pausa** e seta `voidConfirmNeeded` no `store/sync.ts`. Catálogo e fatos continuam fluindo; voids/unvoids ficam represados. `approveVoidBatch()` (também export estático) libera o lote. Aprovação é **one-shot** (reseta após enviar; reiniciar o app re-pede).
-- UI: banner no `app/_layout.tsx` (AuthGate) quando `voidConfirmNeeded > 0` → abre `app/pending-voids.tsx` (tela de revisão). "Manter venda" = `discardPendingVoid` (descarta o void pendente e restaura a venda localmente, sem gerar evento, pois o servidor nunca soube). "Enviar N cancelamentos" = `approveVoidBatch`.
+**Por que ficou visível agora:** o void em massa anulou as 28 vendas → faturamento = R$0; mas os settlements não são vendas, sobreviveram → ficou "Vales recebidos R$240 / Faturamento R$0".
 
-### #3 Cancelamento reversível (un-void)
-- Novo evento `unvoid_sale`. Backend: `POST /sync/unvoid-sale` (`backend/internal/sync/unvoid.go`) limpa `voided_at`/`voided_by`, **re-aplica** estoque/saldo (espelho de `applySale`) e grava em `sale_voids` com `kind='unvoid'`.
-- **Decisão de arquitetura (após revisão TL/QA):** void e unvoid compartilham o stream `sale_voids` (coluna `kind`, migration **0008_sale_void_kind**), com **sequência única (BIGSERIAL)** → ordem causal garantida na convergência entre devices. (A 1ª versão usava `catalog_events`, mas isso quebrava o avanço do cursor e não garantia ordem void-vs-unvoid — descartado.)
-- `backend/internal/sync/pull.go`: emite kind `void_sale`/`unvoid_sale` conforme `sale_voids.kind`; cursor `Void` avança para ambos.
-- Mobile: `applyUnvoidSale` em `lib/sync/apply.ts` (idempotente por `voided_at`), `unvoidSale` local + `getVoidedSales`/`restoreSaleAggregates` em `db/queries/sales.ts`, envio individual em `engine.ts`, `unvoidSale` em `lib/api.ts`. Tela `app/voided-sales.tsx` (lista canceladas + "Restaurar") com atalho na aba de vendas.
+**Snapshot de produção (2026-06-27):**
+- Vendas: 0 ativas, 28 anuladas (R$6.525 anulado; 9 eram fiado = R$1.200).
+- `debt_settlements`: 2 (R$240).
+- Customers: 2 devendo (−R$240), 0 com crédito.
+- ⚠️ Aparente inconsistência a investigar: −240 devido + 240 recebido + 0 vendas ativas. Provável resíduo do estado pós-incidente / débito de sync. Vale uma reconciliação dedicada.
 
-## 3. PENDÊNCIAS CRÍTICAS antes de usar em produção
-1. **Aplicar migration 0008 no Postgres de produção** (ANTES do deploy; é backward-compatible — `ALTER TABLE sale_voids ADD COLUMN kind TEXT NOT NULL DEFAULT 'void'`, o backend antigo continua funcionando):
-   ```sql
-   ALTER TABLE sale_voids ADD COLUMN kind TEXT NOT NULL DEFAULT 'void'
-     CHECK (kind IN ('void','unvoid'));
-   ```
-2. **Deploy do backend** (skill `backend` ou):
-   ```powershell
-   gcloud run deploy gas-backend --source ./backend --region southamerica-east1 --project gas-manager-499616 --update-env-vars FIREBASE_PROJECT_ID=gas-manager-499616
-   ```
-3. **Merge do branch** `feat/protecao-cancelamento-massa` → `main`.
-4. **Gerar APK** (limite EAS reseta 01/07, ou build local Linux — ver sessão 11).
+## 3. Feature da sessão: visão de "Caixa" (IMPLEMENTADA)
+**Caixa = vendas à vista (cash+pix+card) + vales recebidos − despesas.** Fiado NÃO entra até ser pago. Métrica de regime de caixa, ao lado do Faturamento (competência), sem alterá-lo.
+- **Mobile:** `lib/finance.ts` (`computeCashFlow`, puro + 5 testes em `lib/__tests__/finance.test.ts`) + card "Caixa" na tela Financeiro (`app/(tabs)/reports.tsx`), respeitando o seletor de período. 152 testes verdes.
+- **Backend:** `/reports/summary` agora retorna `cash_sales`, `settlements_received`, `caixa` (`handlers.go`); query usa `FILTER (WHERE payment_method IN ('cash','pix','card'))` + soma de `debt_settlements` no período. Teste `TestSummary_Caixa` (helpers `insertSaleM`/`insertSettlement` em `testutil_test.go`). Pacote `reports` verde isolado.
+- **Web:** `SummaryData` + card "Caixa" em destaque no dashboard (`web/src/api.ts`, `web/src/components/SummaryCards.tsx`). Build TypeScript OK.
+- Valores reais de produção (formas de pagamento): sales = cash/pix/card/fiado; settlements = cash/pix. Filtro confirmado contra o banco.
 
-## 4. Estado dos testes
-- **Mobile: 147 testes passando** (`npx jest --no-coverage`).
-- **Backend: verde** (`go test ./...` — atenção: testcontainers/Docker pode dar flake `unexpected EOF` em paralelo sob carga; re-rodar o pacote isolado confirma). Os testes do pacote `sync`, `catalog` e `reports` passam.
-- Plano completo: `docs/superpowers/plans/2026-06-26-protecao-cancelamento-em-massa.md`.
+### Para o caixa aparecer
+- **Mobile:** precisa de **APK novo** — não há EAS Update/OTA configurado (sem `updates`/`runtimeVersion`/`expo-updates` no app.json). O dono gera o APK local no Linux.
+- **Web:** deploy no Firebase Hosting.
+- **Backend:** deploy no Cloud Run (Summary novo).
 
-## 5. Notas / limitações conhecidas
-- **Propagação do un-void:** um device que já tinha a venda anulada localmente reverte no próximo pull (evento `unvoid_sale`). Reinstalação (cursor 0) recebe void+unvoid em ordem e converge para o estado final correto.
-- **Disjuntor não persiste** entre reinícios do app (em memória) — proposital (mais seguro).
-- **#2 (limite server-side)** ficou de fora — complemento de defesa-em-profundidade para uma sessão futura.
+## 4. Pendências abertas (débito de sync herdado — ver memória project-sync-known-issues)
+1. Limpar 2 vendas presas + reconciliar −2 do estoque do celular-fonte (NÃO ligar retry antes).
+2. Retry automático de 'error' com cap + classificação (só depois do item 1).
+3. Erro engolido no pull — `applyEventSafe` (engine.ts) faz catch+log e o cursor avança mesmo se o evento falhou → evento pulado pra sempre.
+4. created_at de restocks/expenses ainda usa `server_received_at` no apply (baixa prioridade).
+5. Reconciliação do estado pós-incidente (item ⚠️ acima).
 
-## 6. Contexto herdado (sessões anteriores)
+## 5. Contexto herdado
 - Mobile Expo SDK 54 + SQLite + NativeWind, offline-first (`sync_outbox` → SyncEngine push/pull).
-- Backend Go + Postgres (Supabase) em Cloud Run `gas-backend`. Migrations aplicadas **manualmente** (sem runner no startup). **Go só roda via PowerShell** neste ambiente. Deploy: SEMPRE `--update-env-vars`.
+- Backend Go + Postgres (Supabase) em Cloud Run `gas-backend`, projeto **gas-manager-499616**, região **southamerica-east1**. Migrations aplicadas manualmente. Go só roda via PowerShell. Deploy: SEMPRE `--update-env-vars`.
 - Web: `web/` React+Vite, Firebase Hosting → https://gas-manager-499616.web.app.
-- Conexão Supabase / segredo: `gcloud secrets versions access latest --secret=DATABASE_URL --project=gas-manager-499616`.
+- Secret Supabase: `gcloud secrets versions access latest --secret=DATABASE_URL --project=gas-manager-499616`.
 - Commits sem menção ao Claude. Suíte inteira + revisão TL/QA antes de fechar.

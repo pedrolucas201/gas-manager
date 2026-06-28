@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getReportByPeriod, getDashboardStats } from "@/db/queries/sales";
 import { getSettlements } from "@/db/queries/settlements";
 import { getExpenses } from "@/db/queries/expenses";
+import { computeCashFlow } from "@/lib/finance";
 import { DashboardStats, DebtSettlement, Expense } from "@/types";
 import { useAppStore } from "@/store";
 import { triggerManualSync } from "@/lib/sync/engine";
@@ -102,6 +103,10 @@ export default function ReportsScreen() {
 
   const totalSettled = settlements.reduce((acc, s) => acc + s.amount, 0);
 
+  // Caixa (regime de caixa): só o dinheiro que de fato entrou no período.
+  // Difere do Faturamento, que conta a venda fiado mesmo sem recebê-la.
+  const cashFlow = computeCashFlow(rows, settlements, expenses);
+
   const settlementByMethod: Record<string, number> = {};
   settlements.forEach((s) => {
     settlementByMethod[s.payment_method] =
@@ -145,6 +150,31 @@ export default function ReportsScreen() {
           <Text className="text-white opacity-80 text-sm font-medium mb-1">Faturamento</Text>
           <Text className="text-white text-3xl font-bold">{formatCurrency(currentRevenue ?? 0)}</Text>
           <Text className="text-white opacity-70 text-sm mt-1">{currentSales ?? 0} botijões vendidos</Text>
+        </View>
+
+        {/* Caixa do período — dinheiro que realmente entrou (regime de caixa) */}
+        <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 mb-4">
+          <View className="flex-row items-center gap-2 mb-1">
+            <Ionicons name="wallet" size={16} color="#0ea5e9" />
+            <Text className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+              Caixa · {periodLabels[period].toLowerCase()}
+            </Text>
+          </View>
+          <Text
+            className={`text-3xl font-bold ${
+              cashFlow.caixa >= 0
+                ? "text-sky-600 dark:text-sky-400"
+                : "text-red-600 dark:text-red-400"
+            }`}
+          >
+            {formatCurrency(cashFlow.caixa)}
+          </Text>
+          <Text className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+            À vista {formatCurrency(cashFlow.aVista)} + Vales {formatCurrency(cashFlow.vales)} − Despesas {formatCurrency(cashFlow.despesas)}
+          </Text>
+          <Text className="text-gray-300 dark:text-gray-600 text-[11px] mt-1">
+            Dinheiro que entrou — fiado não conta até ser pago
+          </Text>
         </View>
 
         {rows.length > 0 && (

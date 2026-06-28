@@ -96,6 +96,28 @@ func insertSale(t *testing.T, pool *pgxpool.Pool, id string, qty int, unitPrice,
 	}
 }
 
+func insertSaleM(t *testing.T, pool *pgxpool.Pool, id string, qty int, unitPrice, costPrice float64, method string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO sales(id,cylinder_type_id,quantity,unit_price,cost_price,total,payment_method,payload_hash,created_by,client_created_at)
+		VALUES ($1::UUID,$2::UUID,$3,$4,$5,$6,$7,'hash-'||$1::TEXT,$8,now())
+	`, id, seedType, qty, unitPrice, costPrice, float64(qty)*unitPrice, method, seedUser)
+	if err != nil {
+		t.Fatalf("insertSaleM %s: %v", id, err)
+	}
+}
+
+func insertSettlement(t *testing.T, pool *pgxpool.Pool, id string, amount float64, method string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO debt_settlements(id,customer_id,amount,payment_method,payload_hash,created_by,client_created_at)
+		VALUES ($1::UUID,$2::UUID,$3,$4,'hash-'||$1::TEXT,$5,now())
+	`, id, seedCustomer, amount, method, seedUser)
+	if err != nil {
+		t.Fatalf("insertSettlement %s: %v", id, err)
+	}
+}
+
 func insertExpense(t *testing.T, pool *pgxpool.Pool, id, category string, amount float64) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `

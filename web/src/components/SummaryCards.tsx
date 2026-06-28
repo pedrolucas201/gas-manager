@@ -16,13 +16,27 @@ export default function SummaryCards({ data }: { data: SummaryData }) {
     },
   ]
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {cards.map(c => (
-        <div key={c.label} className={`border rounded-xl p-4 ${c.color}`}>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">{c.label}</p>
-          <p className="text-xl font-bold mt-1">{c.value}</p>
-        </div>
-      ))}
+    <div className="space-y-4">
+      {/* Caixa em destaque — dinheiro que de fato entrou (regime de caixa) */}
+      <div className="border border-sky-200 bg-sky-50 rounded-xl p-5">
+        <p className="text-xs text-sky-700 uppercase tracking-wide">Caixa (dinheiro que entrou)</p>
+        <p className={`text-3xl font-bold mt-1 ${data.caixa >= 0 ? 'text-sky-700' : 'text-red-600'}`}>
+          {fmt(data.caixa)}
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          À vista {fmt(data.cash_sales)} + Vales {fmt(data.settlements_received)} − Despesas {fmt(data.expenses)}
+        </p>
+        <p className="text-[11px] text-gray-400 mt-0.5">Fiado não conta até ser pago — diferente da Receita</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {cards.map(c => (
+          <div key={c.label} className={`border rounded-xl p-4 ${c.color}`}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide">{c.label}</p>
+            <p className="text-xl font-bold mt-1">{c.value}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

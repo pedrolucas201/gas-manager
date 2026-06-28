@@ -19,6 +19,12 @@ type SummaryResponse struct {
 	Profit   float64 `json:"profit"`
 	Expenses float64 `json:"expenses"`
 	NetFlow  float64 `json:"net_flow"`
+	// Regime de caixa: dinheiro que de fato entrou no período. CashSales são as
+	// vendas à vista (cash/pix/card, exclui fiado); SettlementsReceived são os
+	// vales recebidos; Caixa = CashSales + SettlementsReceived − Expenses.
+	CashSales           float64 `json:"cash_sales"`
+	SettlementsReceived float64 `json:"settlements_received"`
+	Caixa               float64 `json:"caixa"`
 }
 
 type SalesDayRow struct {
@@ -97,14 +103,15 @@ func parseDateRange(r *http.Request) (from, to time.Time) {
 }
 
 func (s *Service) Summary(ctx context.Context, from, to time.Time) (SummaryResponse, error) {
-	var revenue, profit float64
+	var revenue, profit, cashSales float64
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 			COALESCE(SUM(total),0)::FLOAT8,
-			COALESCE(SUM((unit_price - cost_price) * quantity),0)::FLOAT8
+			COALESCE(SUM((unit_price - cost_price) * quantity),0)::FLOAT8,
+			COALESCE(SUM(total) FILTER (WHERE payment_method IN ('cash','pix','card')),0)::FLOAT8
 		FROM sales
 		WHERE voided_at IS NULL AND client_created_at BETWEEN $1 AND $2
-	`, from, to).Scan(&revenue, &profit)
+	`, from, to).Scan(&revenue, &profit, &cashSales)
 	if err != nil {
 		return SummaryResponse{}, err
 	}
@@ -119,11 +126,24 @@ func (s *Service) Summary(ctx context.Context, from, to time.Time) (SummaryRespo
 		return SummaryResponse{}, err
 	}
 
+	var settlements float64
+	err = s.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount),0)::FLOAT8
+		FROM debt_settlements
+		WHERE client_created_at BETWEEN $1 AND $2
+	`, from, to).Scan(&settlements)
+	if err != nil {
+		return SummaryResponse{}, err
+	}
+
 	return SummaryResponse{
-		Revenue:  revenue,
-		Profit:   profit,
-		Expenses: expenses,
-		NetFlow:  revenue - expenses,
+		Revenue:             revenue,
+		Profit:              profit,
+		Expenses:            expenses,
+		NetFlow:             revenue - expenses,
+		CashSales:           cashSales,
+		SettlementsReceived: settlements,
+		Caixa:               cashSales + settlements - expenses,
 	}, nil
 }
 
