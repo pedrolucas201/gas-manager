@@ -28,10 +28,11 @@ O HANDOFF 12 listava como pendências críticas: aplicar migration 0008, deploy 
 - **Web:** `SummaryData` + card "Caixa" em destaque no dashboard (`web/src/api.ts`, `web/src/components/SummaryCards.tsx`). Build TypeScript OK.
 - Valores reais de produção (formas de pagamento): sales = cash/pix/card/fiado; settlements = cash/pix. Filtro confirmado contra o banco.
 
-### Para o caixa aparecer
-- **Mobile:** precisa de **APK novo** — não há EAS Update/OTA configurado (sem `updates`/`runtimeVersion`/`expo-updates` no app.json). O dono gera o APK local no Linux.
-- **Web:** deploy no Firebase Hosting.
-- **Backend:** deploy no Cloud Run (Summary novo).
+### Estado do deploy (27/06)
+- **Backend:** ✅ deployado — revisão `gas-backend-00017-hts`, 100% do tráfego. `/reports/summary` retorna `caixa` (rota confirmada live; 401 sem token).
+- **Web:** ✅ deployado — https://gas-manager-499616.web.app. `SummaryCards` blindado contra skew de versão (commit `afcce03`).
+- **Mobile:** ⏳ depende de **APK novo** (sem OTA — ver [[project_no_ota]]). O dono gera local no Linux a partir do commit `5237e88`+.
+- Commits: `5237e88` (feature) + `afcce03` (fix web).
 
 ## 4. Pendências abertas (débito de sync herdado — ver memória project-sync-known-issues)
 1. Limpar 2 vendas presas + reconciliar −2 do estoque do celular-fonte (NÃO ligar retry antes).
