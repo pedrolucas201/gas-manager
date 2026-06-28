@@ -1,10 +1,12 @@
 import { type SummaryData } from '../api'
 
-function fmt(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+function fmt(n: number | undefined | null) {
+  return (n ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export default function SummaryCards({ data }: { data: SummaryData }) {
+  // Resiliente a skew de versão: backend antigo não retorna os campos de caixa.
+  const caixa = data.caixa ?? 0
   const cards = [
     { label: 'Receita', value: fmt(data.revenue), color: 'bg-blue-50 border-blue-200' },
     { label: 'Lucro Bruto', value: fmt(data.profit), color: 'bg-green-50 border-green-200' },
@@ -20,8 +22,8 @@ export default function SummaryCards({ data }: { data: SummaryData }) {
       {/* Caixa em destaque — dinheiro que de fato entrou (regime de caixa) */}
       <div className="border border-sky-200 bg-sky-50 rounded-xl p-5">
         <p className="text-xs text-sky-700 uppercase tracking-wide">Caixa (dinheiro que entrou)</p>
-        <p className={`text-3xl font-bold mt-1 ${data.caixa >= 0 ? 'text-sky-700' : 'text-red-600'}`}>
-          {fmt(data.caixa)}
+        <p className={`text-3xl font-bold mt-1 ${caixa >= 0 ? 'text-sky-700' : 'text-red-600'}`}>
+          {fmt(caixa)}
         </p>
         <p className="text-xs text-gray-500 mt-1">
           À vista {fmt(data.cash_sales)} + Vales {fmt(data.settlements_received)} − Despesas {fmt(data.expenses)}
